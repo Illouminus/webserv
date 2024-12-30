@@ -24,4 +24,8 @@ public:
 	std::vector<LocationConfig> locations;
 
 	void reset();
+
+	int getPort() const;
+
+	std::string getHost() const;
 };

@@ -2,6 +2,7 @@
 #include <iostream>
 #include <cstdlib>
 #include "outils.cpp"
+#include "WebServ.hpp"
 
 int main(int argc, char *argv[])
 {
@@ -15,8 +16,9 @@ int main(int argc, char *argv[])
 	try
 	{
 		p.parseConfig(configFile);
-
-		printConf(p.getServers());
+		WebServ ws(p.getServers());
+		ws.getListenSockets();
+		// printConf(p.getServers());
 	}
 	catch (std::exception &e)
 	{

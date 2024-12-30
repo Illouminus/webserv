@@ -35,3 +35,13 @@ void ServerConfig::reset()
 	methods.clear();
 	locations.clear();
 }
+
+int ServerConfig::getPort() const
+{
+	return port;
+}
+
+std::string ServerConfig::getHost() const
+{
+	return host;
+}

@@ -9,7 +9,8 @@ INCLUDES = includes
 SRCS = main.cpp \
        src/parsing/Parser.cpp \
        src/parsing/LocationConfig.cpp \
-       src/parsing/ServerConfig.cpp
+       src/parsing/ServerConfig.cpp \
+		 src/WebServ.cpp
 
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
