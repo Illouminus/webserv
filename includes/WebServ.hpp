@@ -8,6 +8,8 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <sys/select.h>
+#include <fcntl.h>
 
 class WebServ
 {
@@ -23,8 +25,9 @@ public:
 private:
 	std::vector<ServerConfig> _servers;
 	std::vector<int> _listenSockets;
-	std::list<int> _clientsSockets;
+	std::list<int> _clientSockets;
 
 	void initSockets();
 	void mainLoop();
+	int getMaxFd();
 };
