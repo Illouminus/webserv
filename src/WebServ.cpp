@@ -105,7 +105,6 @@ void WebServ::mainLoop()
 			FD_SET(*it, &readfds);
 		}
 		int max = this->getMaxFd();
-		std::cout << "Max fd: " << max << "\n";
 		if (max == -1)
 			continue;
 
@@ -132,6 +131,37 @@ void WebServ::mainLoop()
 					std::cerr << "Error accepting connection\n";
 					exit(EXIT_FAILURE);
 				}
+			}
+		}
+
+		for (std::list<int>::iterator it = _clientSockets.begin(); it != _clientSockets.end();)
+		{
+			if (FD_ISSET(*it, &readfds))
+			{
+				char buf[1024];
+				int bytes = recv(*it, buf, 1024, 0);
+				if (bytes <= 0)
+				{
+					close(*it);
+					it = _clientSockets.erase(it);
+				}
+				else
+				{
+					std::string response =
+						 "HTTP/1.1 200 OK\r\n"
+						 "Content-Type: text/plain\r\n"
+						 "Content-Length: 13\r\n"
+						 "\r\n"
+						 "Hello, world!";
+					std::cout << "Received: " << buf << "\n";
+					send(*it, response.c_str(), response.size(), 0);
+					close(*it);
+					it = _clientSockets.erase(it);
+				}
+			}
+			else
+			{
+				++it;
 			}
 		}
 	}

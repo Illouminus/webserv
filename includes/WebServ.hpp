@@ -10,6 +10,7 @@
 #include <arpa/inet.h>
 #include <sys/select.h>
 #include <fcntl.h>
+#include <unistd.h>
 
 class WebServ
 {
