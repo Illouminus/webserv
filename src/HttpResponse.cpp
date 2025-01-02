@@ -41,3 +41,20 @@ bool HttpResponse::setBodyFromFile(const std::string &filePath)
 
 	return true;
 }
+
+void HttpResponse::setBody(const std::string &body)
+{
+	_body = body;
+	// Обновим Content-Length
+	std::ostringstream oss;
+	oss << _body.size();
+	_headers["Content-Length"] = oss.str();
+}
+
+std::string HttpResponse::statusLine() const
+{
+	// "HTTP/1.1 200 OK"
+	std::ostringstream oss;
+	oss << "HTTP/1.1 " << _statusCode << " " << _reasonPhrase << "\r\n";
+	return oss.str();
+}
