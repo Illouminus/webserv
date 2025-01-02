@@ -12,6 +12,7 @@ SRCS = main.cpp \
        src/parsing/ServerConfig.cpp \
 		 src/WebServ.cpp \
 		 src/parsing/HttpParser.cpp \
+		 src/HttpResponse.cpp
 
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
