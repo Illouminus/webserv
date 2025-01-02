@@ -58,3 +58,33 @@ std::string HttpResponse::statusLine() const
 	oss << "HTTP/1.1 " << _statusCode << " " << _reasonPhrase << "\r\n";
 	return oss.str();
 }
+
+std::string HttpResponse::toString() const
+{
+	// 1) Статусная строка
+	std::ostringstream oss;
+	oss << statusLine();
+
+	// 2) Заголовки
+	// Если не установлен Content-Length и у нас есть body,
+	// желательно его проставить
+	if (_headers.find("Content-Length") == _headers.end())
+	{
+		std::ostringstream tmp;
+		tmp << _body.size();
+		oss << "Content-Length: " << tmp.str() << "\r\n";
+	}
+	for (std::map<std::string, std::string>::const_iterator it = _headers.begin();
+		  it != _headers.end(); ++it)
+	{
+		oss << it->first << ": " << it->second << "\r\n";
+	}
+
+	// 3) Пустая строка
+	oss << "\r\n";
+
+	// 4) Тело
+	oss << _body;
+
+	return oss.str();
+}
