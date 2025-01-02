@@ -20,3 +20,24 @@ void HttpResponse::setHeader(const std::string &key, const std::string &value)
 {
 	_headers[key] = value;
 }
+
+bool HttpResponse::setBodyFromFile(const std::string &filePath)
+{
+	std::ifstream ifs(filePath.c_str(), std::ios::binary);
+	if (!ifs.is_open())
+	{
+		// Ошибка открытия файла
+		return false;
+	}
+	// Считываем весь файл в _body (для учебных целей)
+	std::ostringstream oss;
+	oss << ifs.rdbuf();
+	_body = oss.str();
+
+	// Автоматически можем поставить Content-Length
+	std::ostringstream cl;
+	cl << _body.size();
+	_headers["Content-Length"] = cl.str();
+
+	return true;
+}
