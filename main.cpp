@@ -17,9 +17,7 @@ int main(int argc, char *argv[])
 	{
 		p.parseConfig(configFile);
 		WebServ ws(p.getServers());
-		ws.getListenSockets();
 		ws.start();
-		// printConf(p.getServers());
 	}
 	catch (std::exception &e)
 	{

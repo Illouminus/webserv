@@ -1,4 +1,5 @@
 #include "WebServ.hpp"
+#include "HttpParser.hpp"
 
 WebServ::~WebServ() {}
 WebServ::WebServ(const std::vector<ServerConfig> &configs) : _servers(configs)
@@ -125,6 +126,7 @@ void WebServ::mainLoop()
 				{
 					fcntl(clientSocket, F_SETFL, O_NONBLOCK);
 					_clientSockets.push_back(clientSocket);
+					_parsers[clientSocket] = HttpParser();
 				}
 				else
 				{
@@ -136,27 +138,61 @@ void WebServ::mainLoop()
 
 		for (std::list<int>::iterator it = _clientSockets.begin(); it != _clientSockets.end();)
 		{
-			if (FD_ISSET(*it, &readfds))
+			int fd = *it;
+			if (FD_ISSET(fd, &readfds))
 			{
 				char buf[1024];
-				int bytes = recv(*it, buf, 1024, 0);
+				int bytes = recv(fd, buf, sizeof(buf), 0);
 				if (bytes <= 0)
 				{
-					close(*it);
-					it = _clientSockets.erase(it);
+					// Клиент закрыл соединение или ошибка
+					close(fd);
+					_parsers.erase(fd);				 // Удаляем парсер
+					it = _clientSockets.erase(it); // Удаляем сокет
 				}
 				else
 				{
-					std::string response =
-						 "HTTP/1.1 200 OK\r\n"
-						 "Content-Type: text/plain\r\n"
-						 "Content-Length: 13\r\n"
-						 "\r\n"
-						 "Hello, world!";
-					std::cout << "Received: " << buf << "\n";
-					send(*it, response.c_str(), response.size(), 0);
-					close(*it);
-					it = _clientSockets.erase(it);
+					// Парсить кусок данных
+					_parsers[fd].appendData(std::string(buf, bytes));
+
+					if (_parsers[fd].isComplete())
+					{
+						std::cout << _parsers[fd].isKeepAlive() << std::endl;
+						// Запрос собран!
+						HttpParser &p = _parsers[fd];
+						HttpMethod method = p.getMethod();
+						std::string path = p.getPath();
+						std::string version = p.getVersion();
+						std::cout << "Method: " << method << "\n";
+						std::cout << "Path: " << path << "\n";
+						std::cout << "Version: " << version << "\n";
+						// и т.д.
+
+						// Сформировать ответ:
+						std::string response =
+							 "HTTP/1.1 200 OK\r\n"
+							 "Content-Type: text/plain\r\n"
+							 "Content-Length: 13\r\n"
+							 "\r\n"
+							 "Hello, world!";
+
+						send(fd, response.c_str(), response.size(), 0);
+
+						// Закрыть соединение (или оставить открытым, если нужно keep-alive)
+						if (!_parsers[fd].isKeepAlive())
+						{
+							close(fd);
+							_parsers.erase(fd);
+							it = _clientSockets.erase(it);
+						}
+						else
+						{
+							// Очистить парсер для нового запроса
+							_parsers[fd] = HttpParser();
+							++it;
+						}
+						continue;
+					}
 				}
 			}
 			else

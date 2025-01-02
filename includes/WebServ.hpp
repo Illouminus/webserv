@@ -11,6 +11,7 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include "HttpParser.hpp"
 
 class WebServ
 {
@@ -27,6 +28,7 @@ private:
 	std::vector<ServerConfig> _servers;
 	std::vector<int> _listenSockets;
 	std::list<int> _clientSockets;
+	std::map<int, HttpParser> _parsers;
 
 	void initSockets();
 	void mainLoop();

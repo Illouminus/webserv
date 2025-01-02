@@ -10,7 +10,8 @@ SRCS = main.cpp \
        src/parsing/Parser.cpp \
        src/parsing/LocationConfig.cpp \
        src/parsing/ServerConfig.cpp \
-		 src/WebServ.cpp
+		 src/WebServ.cpp \
+		 src/parsing/HttpParser.cpp \
 
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
@@ -20,7 +21,7 @@ $(NAME): $(OBJS)
 	$(CXX) $(CXXFLAGS) -I $(INCLUDES) -o $(NAME) $(OBJS)
 
 $(OBJDIR)/%.o: %.cpp
-	@mkdir -p $(dir $@)
+	@mkdir -p $(dir $@) 
 	$(CXX) $(CXXFLAGS) -I $(INCLUDES) -c $< -o $@
 
 clean:
