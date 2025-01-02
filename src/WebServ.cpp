@@ -1,5 +1,6 @@
 #include "WebServ.hpp"
 #include "HttpParser.hpp"
+#include "HttpResponse.hpp"
 
 WebServ::~WebServ() {}
 WebServ::WebServ(const std::vector<ServerConfig> &configs) : _servers(configs)
@@ -157,37 +158,59 @@ void WebServ::mainLoop()
 
 					if (_parsers[fd].isComplete())
 					{
-						std::cout << _parsers[fd].isKeepAlive() << std::endl;
-						// Запрос собран!
 						HttpParser &p = _parsers[fd];
-						HttpMethod method = p.getMethod();
+
+						// Читаем метод, path, версию, заголовки...
+						// HttpMethod method = p.getMethod();
 						std::string path = p.getPath();
-						std::string version = p.getVersion();
-						std::cout << "Method: " << method << "\n";
-						std::cout << "Path: " << path << "\n";
-						std::cout << "Version: " << version << "\n";
-						// и т.д.
+						std::cout << path << std::endl;
 
-						// Сформировать ответ:
-						std::string response =
-							 "HTTP/1.1 200 OK\r\n"
-							 "Content-Type: text/plain\r\n"
-							 "Content-Length: 13\r\n"
-							 "\r\n"
-							 "Hello, world!";
+						// Пример: формируем физический путь, допустим docroot + path
+						std::string docRoot = "/var/www";
+						std::string fullPath = docRoot + path; // e.g. "/var/www/index.html"
 
-						send(fd, response.c_str(), response.size(), 0);
+						HttpResponse resp;
 
-						// Закрыть соединение (или оставить открытым, если нужно keep-alive)
-						if (!_parsers[fd].isKeepAlive())
+						// Попробуем открыть файл:
+						if (!resp.setBodyFromFile(fullPath))
 						{
-							close(fd);
-							_parsers.erase(fd);
-							it = _clientSockets.erase(it);
+							// Файл не найден => 404
+							resp.setStatus(404, "Not Found");
+							resp.setBody("File Not Found\n");
+							resp.setHeader("Content-Type", "text/plain");
 						}
 						else
 						{
-							// Очистить парсер для нового запроса
+							// Успешно прочли файл. Можно задать Content-Type
+							// (пока примитивно text/html)
+							resp.setHeader("Content-Type", "text/html");
+							resp.setStatus(200, "OK");
+						}
+
+						// Keep-Alive?
+						if (!p.isKeepAlive())
+						{
+							resp.setHeader("Connection", "close");
+						}
+						else
+						{
+							resp.setHeader("Connection", "keep-alive");
+						}
+
+						// Сформировать строку и отправить
+						std::string rawResponse = resp.toString();
+						send(fd, rawResponse.c_str(), rawResponse.size(), 0);
+
+						// Если не keep-alive — закрываем
+						if (!p.isKeepAlive())
+						{
+							close(fd);
+							_parsers.erase(fd);
+							_clientSockets.erase(it++); // итератор ++ аккуратно
+						}
+						else
+						{
+							// обнуляем парсер
 							_parsers[fd] = HttpParser();
 							++it;
 						}
