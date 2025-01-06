@@ -52,6 +52,7 @@ void WebServ::initSockets()
 			exit(EXIT_FAILURE);
 		}
 		_listenSockets.push_back(listenSocket);
+		_listenSockettoServerIndex[listenSocket] = i;
 	}
 }
 
@@ -125,6 +126,8 @@ void WebServ::mainLoop()
 				int clientSocket = accept(_listenSockets[i], (struct sockaddr *)&addr, &addr_len);
 				if (clientSocket > 0)
 				{
+					size_t serverIndex = _listenSockettoServerIndex[_listenSockets[i]];
+					_clientToServerIndex[clientSocket] = serverIndex;
 					fcntl(clientSocket, F_SETFL, O_NONBLOCK);
 					_clientSockets.push_back(clientSocket);
 					_parsers[clientSocket] = HttpParser();
@@ -140,6 +143,9 @@ void WebServ::mainLoop()
 		for (std::list<int>::iterator it = _clientSockets.begin(); it != _clientSockets.end();)
 		{
 			int fd = *it;
+			size_t serverIndex = _clientToServerIndex[fd];
+			ServerConfig &server = _servers[serverIndex];
+			std::cout << "Server: " << server.getHost() << ":" << server.getPort() << std::endl;
 			if (FD_ISSET(fd, &readfds))
 			{
 				char buf[1024];
@@ -163,11 +169,11 @@ void WebServ::mainLoop()
 						// Читаем метод, path, версию, заголовки...
 						// HttpMethod method = p.getMethod();
 						std::string path = p.getPath();
-						std::cout << path << std::endl;
 
 						// Пример: формируем физический путь, допустим docroot + path
-						std::string docRoot = "/var/www";
+						std::string docRoot = "www";
 						std::string fullPath = docRoot + path; // e.g. "/var/www/index.html"
+						std::cout << fullPath << std::endl;
 
 						HttpResponse resp;
 

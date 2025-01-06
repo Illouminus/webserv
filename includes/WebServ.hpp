@@ -29,6 +29,8 @@ private:
 	std::vector<int> _listenSockets;
 	std::list<int> _clientSockets;
 	std::map<int, HttpParser> _parsers;
+	std::map<int, size_t> _listenSockettoServerIndex;
+	std::map<int, size_t> _clientToServerIndex;
 
 	void initSockets();
 	void mainLoop();

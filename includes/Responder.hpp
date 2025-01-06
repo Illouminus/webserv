@@ -1,0 +1,10 @@
+#pragma once
+#include <string>
+#include <vector>
+#include <map>
+#include <functional>
+#include <memory>
+#include <iostream>
+#include <sstream>
+#include <fstream>
+#include <algorithm>
