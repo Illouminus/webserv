@@ -12,7 +12,6 @@
 #include "LocationConfig.hpp"
 
 
-
 class Responder {
     private:
     
@@ -20,6 +19,6 @@ class Responder {
     public:
         Responder(ServerConfig const &config, const std::string &path);
         ~Responder();
-        LocationConfig *findLocation(ServerConfig const &conf, const std::string &path);
+        const LocationConfig *findLocation(ServerConfig const &conf, const std::string &path);
 
 };
