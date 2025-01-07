@@ -212,10 +212,18 @@ void HttpParser::parseHeaderLine(const std::string &line)
 
 	// Trim пробелы
 	// Можно написать helper-функцию trim
-	while (!key.empty() && std::isspace(static_cast<unsigned char>(key.back())))
-		key.pop_back();
-	while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front())))
-		value.erase(value.begin());
+// trim trailing whitespace (аналог pop_back()):
+while (!key.empty() && std::isspace(static_cast<unsigned char>(key[key.size() - 1])))
+{
+    key.erase(key.size() - 1, 1);
+}
+
+// trim leading whitespace (аналог front()):
+while (!value.empty() && std::isspace(static_cast<unsigned char>(value[0])))
+{
+    value.erase(0, 1);
+}
+
 
 	// Приводим key в нижний регистр для удобства (часто делают так)
 	std::transform(key.begin(), key.end(), key.begin(), ::tolower);

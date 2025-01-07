@@ -110,7 +110,6 @@ void WebServ::mainLoop()
 		int max = this->getMaxFd();
 		if (max == -1)
 			continue;
-
 		if (select(max + 1, &readfds, NULL, NULL, NULL) == -1)
 		{
 			std::cerr << "Error in select\n";

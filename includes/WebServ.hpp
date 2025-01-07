@@ -11,7 +11,9 @@
 #include <sys/select.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <cstdlib>
 #include "HttpParser.hpp"
+#include <algorithm>
 
 class WebServ
 {

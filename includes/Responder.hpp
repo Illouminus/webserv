@@ -8,3 +8,18 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include "ServerConfig.hpp"
+#include "LocationConfig.hpp"
+
+
+
+class Responder {
+    private:
+    
+
+    public:
+        Responder(ServerConfig const &config, const std::string &path);
+        ~Responder();
+        LocationConfig *findLocation(ServerConfig const &conf, const std::string &path);
+
+};

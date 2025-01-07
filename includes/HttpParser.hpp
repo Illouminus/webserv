@@ -3,6 +3,8 @@
 #include <string>
 #include <vector>
 #include <map>
+#include <algorithm>
+#include <vector>
 
 enum HttpMethod
 {
