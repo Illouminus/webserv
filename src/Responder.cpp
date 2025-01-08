@@ -7,6 +7,128 @@
 Responder::Responder() {};
 Responder::~Responder() {};
 
+HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &server)
+{
+	HttpResponse resp;
+
+	// 1) Найдём локацию
+	std::string path = parser.getPath();
+	const LocationConfig *loc = findLocation(server, path);
+
+	// 2) Проверим метод
+	// Сформируем список методов, разрешённых в loc->methods (если не пусто), иначе server.methods
+	HttpMethod method = parser.getMethod();
+
+	// Соберём строку Allow (например "GET, POST, DELETE")
+	std::string allowHeader;
+	if (!isMethodAllowed(method, server, loc, allowHeader))
+	{
+		resp.setStatus(405, "Method Not Allowed");
+		resp.setHeader("Content-Type", "text/plain");
+		resp.setHeader("Allow", allowHeader); // «Allow: GET, POST, ...»
+		resp.setBody("405 Method Not Allowed\n");
+		// Попробуем подставить свою error_page[405], если хотите
+		handleErrorPage(resp, server, 405);
+		return resp;
+	}
+
+	// 3) Если у локации есть redirect (return 301 /newpath):
+	// Предположим loc->redirect == "301 /newpath"
+	if (loc && !loc->redirect.empty())
+	{
+		// Парсим "301 /newpath"
+		// это возможно "302 /other" etc
+		std::istringstream iss(loc->redirect);
+		int code;
+		std::string newPath;
+		iss >> code >> newPath;
+
+		resp.setStatus(code, "Redirect");
+		resp.setHeader("Location", newPath);
+		resp.setHeader("Content-Length", "0");
+		return resp;
+	}
+
+	// 4) Строим физический путь
+	std::string realFilePath = buildFilePath(server, loc, path);
+
+	// 5) Проверим, существует ли файл
+	// Если это директория, и autoindex on/off и index...
+	// (Упрощённо ниже)
+	struct stat st;
+	if (stat(realFilePath.c_str(), &st) == 0)
+	{
+		// Проверка, не является ли директорией
+		if (S_ISDIR(st.st_mode))
+		{
+			// Если loc->index не пуст, попробуем attach index
+			if (loc && !loc->index.empty())
+			{
+				if (realFilePath[realFilePath.size() - 1] != '/')
+					realFilePath += "/";
+				realFilePath += loc->index;
+				// проверим снова stat
+				if (stat(realFilePath.c_str(), &st) == 0 && !S_ISDIR(st.st_mode))
+				{
+					// ок, есть index
+				}
+				else
+				{
+					// Возможно autoindex
+					// Или 403/404
+					resp.setStatus(403, "Forbidden");
+					resp.setBody("Directory listing is forbidden\n");
+					handleErrorPage(resp, server, 403);
+					return resp;
+				}
+			}
+			else
+			{
+				// autoindex? Если off -> 403
+				if (!server.autoindex && !(loc && loc->autoindex))
+				{
+					resp.setStatus(403, "Forbidden");
+					resp.setBody("Directory listing is forbidden\n");
+					handleErrorPage(resp, server, 403);
+					return resp;
+				}
+				else
+				{
+					// сделать autoindex listing
+					// (пример не реализован)
+					resp.setStatus(200, "OK");
+					resp.setHeader("Content-Type", "text/html");
+					resp.setBody("<html><body><h1>Index of directory ...</h1></body></html>");
+					return resp;
+				}
+			}
+		}
+		// Файл существует, попытаемся отдать
+		if (!setBodyFromFile(resp, realFilePath))
+		{
+			// не смогли прочитать
+			resp.setStatus(403, "Forbidden");
+			resp.setBody("Cannot read file\n");
+			handleErrorPage(resp, server, 403);
+			return resp;
+		}
+
+		resp.setStatus(200, "OK");
+		// Определим Content-Type по расширению
+		std::string ctype = getContentTypeByExtension(realFilePath);
+		resp.setHeader("Content-Type", ctype);
+	}
+	else
+	{
+		// Файл не найден
+		resp.setStatus(404, "Not Found");
+		resp.setBody("File Not Found\n");
+		handleErrorPage(resp, server, 404);
+	}
+
+	return resp;
+}
+
 const LocationConfig *Responder::findLocation(const ServerConfig &srv, const std::string &path)
 {
 	size_t bestMatch = 0;
