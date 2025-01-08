@@ -101,3 +101,30 @@ bool Responder::isMethodAllowed(HttpMethod method, const ServerConfig &server, c
 	// Если метод неизвестный (UNKNOWN), тоже false
 	return false;
 }
+
+std::string Responder::buildFilePath(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
+{
+	// Если есть локация и loc->root не пуст, используем её root. Иначе server.root
+	std::string rootPath;
+	if (loc && !loc->root.empty())
+		rootPath = loc->root;
+	else
+		rootPath = server.root;
+
+	// Если локация существует, нужно убрать из reqPath ту часть, что совпадает с loc->path
+	// например, loc->path == "/images", reqPath == "/images/test.png"
+	// значит realPart = "/test.png"
+	std::string realPart = reqPath;
+	if (loc && !loc->path.empty())
+	{
+		size_t len = loc->path.size();
+		realPart = reqPath.substr(len); // если reqPath = "/images/test.png", len=7
+	}
+
+	// Склеиваем
+	// Если rootPath не заканчивается на '/', можно добавить вручную
+	if (!rootPath.empty() && rootPath[rootPath.size() - 1] == '/')
+		return rootPath + realPart;
+	else
+		return rootPath + "/" + realPart;
+}
