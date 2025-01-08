@@ -51,3 +51,53 @@ std::string Responder::getContentTypeByExtension(const std::string &path)
 	// Можно добавить ещё
 	return "application/octet-stream";
 }
+
+bool Responder::isMethodAllowed(HttpMethod method, const ServerConfig &server, const LocationConfig *loc, std::string &allowHeader)
+{
+	// Соберём список методов
+	std::vector<std::string> allowed;
+	if (loc && !loc->methods.empty())
+		allowed = loc->methods;
+	else
+		allowed = server.methods;
+
+	// Преобразуем HttpMethod method -> string ("GET", "POST", etc)
+	// Условно:
+	std::string m;
+	switch (method)
+	{
+	case HTTP_METHOD_GET:
+		m = "GET";
+		break;
+	case HTTP_METHOD_POST:
+		m = "POST";
+		break;
+	case HTTP_METHOD_DELETE:
+		m = "DELETE";
+		break;
+	case HTTP_METHOD_PUT:
+		m = "PUT";
+		break;
+	default:
+		m = "UNKNOWN";
+	}
+
+	// Соберём allowHeader
+	std::ostringstream oss;
+	for (size_t i = 0; i < allowed.size(); i++)
+	{
+		if (i > 0)
+			oss << ", ";
+		oss << allowed[i];
+	}
+	allowHeader = oss.str();
+
+	// Проверка, есть ли m в allowed
+	for (size_t i = 0; i < allowed.size(); i++)
+	{
+		if (allowed[i] == m)
+			return true;
+	}
+	// Если метод неизвестный (UNKNOWN), тоже false
+	return false;
+}
