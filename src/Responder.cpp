@@ -13,6 +13,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 
 	// 1) Найдём локацию
 	std::string path = parser.getPath();
+	std::cout << path << std::endl;
 	const LocationConfig *loc = findLocation(server, path);
 
 	// 2) Проверим метод
@@ -51,6 +52,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 
 	// 4) Строим физический путь
 	std::string realFilePath = buildFilePath(server, loc, path);
+	std::cout << "realFilePath: " << realFilePath << std::endl;
 
 	// 5) Проверим, существует ли файл
 	// Если это директория, и autoindex on/off и index...
@@ -224,31 +226,51 @@ bool Responder::isMethodAllowed(HttpMethod method, const ServerConfig &server, c
 	return false;
 }
 
-std::string Responder::buildFilePath(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
+std::string Responder::buildFilePath(const ServerConfig &server,
+												 const LocationConfig *loc,
+												 const std::string &reqPath)
 {
-	// Если есть локация и loc->root не пуст, используем её root. Иначе server.root
+	// 1) Определяем root
 	std::string rootPath;
 	if (loc && !loc->root.empty())
 		rootPath = loc->root;
 	else
 		rootPath = server.root;
 
-	// Если локация существует, нужно убрать из reqPath ту часть, что совпадает с loc->path
-	// например, loc->path == "/images", reqPath == "/images/test.png"
-	// значит realPart = "/test.png"
-	std::string realPart = reqPath;
+	// Удаляем завершающий '/', кроме случая когда rootPath == "/"
+	if (rootPath.size() > 1 && rootPath.back() == '/')
+	{
+		rootPath.erase(rootPath.size() - 1);
+	}
+
+	// 2) Уберём loc->path из reqPath (префикс)
+	std::string realPart = reqPath; // например "/index.html"
 	if (loc && !loc->path.empty())
 	{
 		size_t len = loc->path.size();
-		realPart = reqPath.substr(len); // если reqPath = "/images/test.png", len=7
+		// Убедимся, что path действительно начинается на loc->path
+		if (realPart.size() >= len && realPart.compare(0, len, loc->path) == 0)
+		{
+			realPart.erase(0, len); // вырезаем префикс
+		}
 	}
 
-	// Склеиваем
-	// Если rootPath не заканчивается на '/', можно добавить вручную
-	if (!rootPath.empty() && rootPath[rootPath.size() - 1] == '/')
-		return rootPath + realPart;
+	// 3) Удаляем ведущий '/' из realPart, если есть
+	// (чтобы не получить двойные слэши при склейке)
+	if (!realPart.empty() && realPart[0] == '/')
+	{
+		realPart.erase(0, 1);
+	}
+
+	// 4) Cклеиваем: rootPath + "/" + realPart
+	// если realPart пустой => получится rootPath
+	std::string filePath;
+	if (realPart.empty())
+		filePath = rootPath; // например "www"
 	else
-		return rootPath + "/" + realPart;
+		filePath = rootPath + "/" + realPart; // "www/index.html"
+
+	return filePath;
 }
 
 bool Responder::setBodyFromFile(HttpResponse &resp, const std::string &filePath)

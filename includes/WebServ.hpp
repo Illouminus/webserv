@@ -15,6 +15,7 @@
 #include "HttpParser.hpp"
 #include <algorithm>
 #include "LocationConfig.hpp"
+#include "Responder.hpp"
 
 class WebServ
 {
@@ -38,4 +39,6 @@ private:
 	void initSockets();
 	void mainLoop();
 	int getMaxFd();
+	void acceptNewConnections(fd_set &readfds);
+	void handleClientSockets(fd_set &readfds, Responder &responder);
 };

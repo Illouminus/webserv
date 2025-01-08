@@ -3,12 +3,30 @@
 #include "HttpResponse.hpp"
 #include "Responder.hpp"
 
+#include <iostream>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <sys/select.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <cstdlib>
+#include <algorithm>
+
+// ====================
+//    Конструкторы
+// ====================
 WebServ::~WebServ() {}
-WebServ::WebServ(const std::vector<ServerConfig> &configs) : _servers(configs)
+
+WebServ::WebServ(const std::vector<ServerConfig> &configs)
+	 : _servers(configs)
 {
 	this->initSockets();
 }
-WebServ::WebServ(const WebServ &other) : _servers(other._servers) {}
+
+WebServ::WebServ(const WebServ &other)
+	 : _servers(other._servers) {}
+
 WebServ &WebServ::operator=(const WebServ &other)
 {
 	if (this != &other)
@@ -18,6 +36,17 @@ WebServ &WebServ::operator=(const WebServ &other)
 	return *this;
 }
 
+// ====================
+//    Основной start
+// ====================
+void WebServ::start()
+{
+	this->mainLoop();
+}
+
+// ====================
+//    initSockets
+// ====================
 void WebServ::initSockets()
 {
 	for (size_t i = 0; i < _servers.size(); i++)
@@ -52,11 +81,16 @@ void WebServ::initSockets()
 			std::cerr << "Error listening on socket\n";
 			exit(EXIT_FAILURE);
 		}
+
+		// Сохраняем
 		_listenSockets.push_back(listenSocket);
 		_listenSockettoServerIndex[listenSocket] = i;
 	}
 }
 
+// ====================
+//    getListenSockets
+// ====================
 void WebServ::getListenSockets()
 {
 	for (size_t i = 0; i < _listenSockets.size(); i++)
@@ -65,20 +99,21 @@ void WebServ::getListenSockets()
 	}
 }
 
-void WebServ::start()
-{
-	this->mainLoop();
-}
-
+// ====================
+//    getMaxFd
+// ====================
 int WebServ::getMaxFd()
 {
 	int max_fd = -1;
+
+	// Проверяем слушающие
 	if (!_listenSockets.empty())
 	{
 		int max_listen_fd = *std::max_element(_listenSockets.begin(), _listenSockets.end());
 		if (max_listen_fd > max_fd)
 			max_fd = max_listen_fd;
 	}
+	// Проверяем клиентские
 	if (!_clientSockets.empty())
 	{
 		int max_client_fd = *std::max_element(_clientSockets.begin(), _clientSockets.end());
@@ -88,138 +123,146 @@ int WebServ::getMaxFd()
 	return max_fd;
 }
 
+// ====================
+//    mainLoop
+// ====================
 void WebServ::mainLoop()
 {
-	while (1)
+	// Создадим responder один раз, можно и на каждый запрос, но обычно хватает одного
+	Responder responder;
+
+	while (true)
 	{
 		fd_set readfds;
 		FD_ZERO(&readfds);
+
+		// Добавляем все слушающие сокеты
 		for (size_t i = 0; i < _listenSockets.size(); i++)
 		{
 			FD_SET(_listenSockets[i], &readfds);
 		}
-		for (std::list<int>::iterator it = _clientSockets.begin(); it != _clientSockets.end(); it++)
+		// Добавляем уже подключенных клиентов
+		for (std::list<int>::iterator it = _clientSockets.begin();
+			  it != _clientSockets.end(); ++it)
 		{
 			FD_SET(*it, &readfds);
 		}
-		int max = this->getMaxFd();
-		if (max == -1)
-			continue;
-		if (select(max + 1, &readfds, NULL, NULL, NULL) == -1)
+
+		int max_fd = getMaxFd();
+		if (max_fd == -1)
+			continue; // нет ни одного сокета
+
+		// Ждем события
+		if (select(max_fd + 1, &readfds, NULL, NULL, NULL) == -1)
 		{
 			std::cerr << "Error in select\n";
 			exit(EXIT_FAILURE);
 		}
 
-		for (size_t i = 0; i < _listenSockets.size(); i++)
+		// 1) Принимаем новые соединения
+		acceptNewConnections(readfds);
+
+		// 2) Обрабатываем уже подключенных клиентов
+		handleClientSockets(readfds, responder);
+	}
+}
+
+// ====================
+//   acceptNewConnections
+// ====================
+void WebServ::acceptNewConnections(fd_set &readfds)
+{
+	for (size_t i = 0; i < _listenSockets.size(); i++)
+	{
+		int listenFd = _listenSockets[i];
+		if (FD_ISSET(listenFd, &readfds))
 		{
-			if (FD_ISSET(_listenSockets[i], &readfds))
+			struct sockaddr_in addr;
+			socklen_t addr_len = sizeof(addr);
+			int clientSocket = accept(listenFd, (struct sockaddr *)&addr, &addr_len);
+			if (clientSocket > 0)
 			{
-				struct sockaddr_in addr;
-				socklen_t addr_len = sizeof(addr);
-				int clientSocket = accept(_listenSockets[i], (struct sockaddr *)&addr, &addr_len);
-				if (clientSocket > 0)
-				{
-					size_t serverIndex = _listenSockettoServerIndex[_listenSockets[i]];
-					_clientToServerIndex[clientSocket] = serverIndex;
-					fcntl(clientSocket, F_SETFL, O_NONBLOCK);
-					_clientSockets.push_back(clientSocket);
-					_parsers[clientSocket] = HttpParser();
-				}
-				else
-				{
-					std::cerr << "Error accepting connection\n";
-					exit(EXIT_FAILURE);
-				}
-			}
-		}
+				// определяем, к какому серверу относится
+				size_t serverIndex = _listenSockettoServerIndex[listenFd];
 
-		for (std::list<int>::iterator it = _clientSockets.begin(); it != _clientSockets.end();)
-		{
-			int fd = *it;
-			size_t serverIndex = _clientToServerIndex[fd];
-			ServerConfig &server = _servers[serverIndex];
-			if (FD_ISSET(fd, &readfds))
-			{
-				char buf[1024];
-				int bytes = recv(fd, buf, sizeof(buf), 0);
-				if (bytes <= 0)
-				{
-					close(fd);
-					_parsers.erase(fd);
-					it = _clientSockets.erase(it);
-				}
-				else
-				{
-					// Парсить кусок данных
-					_parsers[fd].appendData(std::string(buf, bytes));
+				// настроим неблокирующий
+				fcntl(clientSocket, F_SETFL, O_NONBLOCK);
 
-					if (_parsers[fd].isComplete())
-					{
-						HttpParser &p = _parsers[fd];
-
-						// Читаем метод, path, версию, заголовки...
-						// HttpMethod method = p.getMethod();
-						std::string path = p.getPath();
-
-						// Пример: формируем физический путь, допустим docroot + path
-						std::string docRoot = "www";
-						std::string fullPath = docRoot + path; // e.g. "/var/www/index.html"
-						std::cout << fullPath << std::endl;
-
-						HttpResponse resp;
-
-						// Попробуем открыть файл:
-						if (!resp.setBodyFromFile(fullPath))
-						{
-							// Файл не найден => 404
-							resp.setStatus(404, "Not Found");
-							resp.setBody("File Not Found\n");
-							resp.setHeader("Content-Type", "text/plain");
-						}
-						else
-						{
-							// Успешно прочли файл. Можно задать Content-Type
-							// (пока примитивно text/html)
-							resp.setHeader("Content-Type", "text/html");
-							resp.setStatus(200, "OK");
-						}
-
-						// Keep-Alive?
-						if (!p.isKeepAlive())
-						{
-							resp.setHeader("Connection", "close");
-						}
-						else
-						{
-							resp.setHeader("Connection", "keep-alive");
-						}
-
-						// Сформировать строку и отправить
-						std::string rawResponse = resp.toString();
-						send(fd, rawResponse.c_str(), rawResponse.size(), 0);
-
-						// Если не keep-alive — закрываем
-						if (!p.isKeepAlive())
-						{
-							close(fd);
-							_parsers.erase(fd);
-							_clientSockets.erase(it++); // итератор ++ аккуратно
-						}
-						else
-						{
-							// обнуляем парсер
-							_parsers[fd] = HttpParser();
-							++it;
-						}
-						continue;
-					}
-				}
+				// сохраняем
+				_clientSockets.push_back(clientSocket);
+				_parsers[clientSocket] = HttpParser();
+				_clientToServerIndex[clientSocket] = serverIndex;
 			}
 			else
 			{
-				++it;
+				std::cerr << "Error accepting connection\n";
+				exit(EXIT_FAILURE);
 			}
 		}
+	}
+}
+
+// ====================
+//   handleClientSockets
+// ====================
+void WebServ::handleClientSockets(fd_set &readfds, Responder &responder)
+{
+	for (std::list<int>::iterator it = _clientSockets.begin();
+		  it != _clientSockets.end();)
+	{
+		int fd = *it;
+
+		// Проверяем, готов ли fd к чтению
+		if (FD_ISSET(fd, &readfds))
+		{
+			char buf[1024];
+			int bytes = recv(fd, buf, sizeof(buf), 0);
+			if (bytes <= 0)
+			{
+				// -1 ошибка или 0 клиент закрыл
+				close(fd);
+				_parsers.erase(fd);
+				_clientToServerIndex.erase(fd);
+				it = _clientSockets.erase(it);
+				continue;
+			}
+			else
+			{
+				// Добавляем прочитанные данные в парсер
+				_parsers[fd].appendData(std::string(buf, bytes));
+
+				// Если парсер собрал весь запрос
+				if (_parsers[fd].isComplete())
+				{
+					// Узнаём, к какому серверу принадлежит этот сокет
+					size_t serverIndex = _clientToServerIndex[fd];
+					ServerConfig &server = _servers[serverIndex];
+
+					// Вызываем Responder
+					HttpResponse resp = responder.handleRequest(_parsers[fd], server);
+
+					// Отправляем
+					std::string rawResponse = resp.toString();
+					std::cout << rawResponse << "\n";
+					send(fd, rawResponse.c_str(), rawResponse.size(), 0);
+
+					// Проверяем, keep-alive или закрыть
+					if (!_parsers[fd].isKeepAlive())
+					{
+						close(fd);
+						_parsers.erase(fd);
+						_clientToServerIndex.erase(fd);
+						it = _clientSockets.erase(it);
+						continue; // переходим к следующему
+					}
+					else
+					{
+						// Перезапускаем парсер, чтобы прочитать следующий запрос
+						_parsers[fd] = HttpParser();
+					}
+				}
+			}
+		}
+		++it; // если не удалили итератор, двигаемся дальше
 	}
 }
