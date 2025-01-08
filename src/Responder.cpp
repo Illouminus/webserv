@@ -139,3 +139,23 @@ bool Responder::setBodyFromFile(HttpResponse &resp, const std::string &filePath)
 	resp.setBody(oss.str());
 	return true;
 }
+
+void Responder::handleErrorPage(HttpResponse &resp, ServerConfig &server, int code)
+{
+	// Ищем в server.error_pages
+	if (server.error_pages.find(code) != server.error_pages.end())
+	{
+		std::string errorPath = server.error_pages[code];
+		// Обычно путь может быть абсолютным или относительным root (зависит от логики)
+		// Для упрощения предположим, что "error_pages" — абсолютный путь, или же "root + errorPath".
+		// Попробуем прочитать
+		std::ifstream ifs(errorPath.c_str());
+		if (ifs.is_open())
+		{
+			std::ostringstream oss;
+			oss << ifs.rdbuf();
+			resp.setBody(oss.str());
+			resp.setHeader("Content-Type", "text/html");
+		}
+	}
+}
