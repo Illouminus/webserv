@@ -128,3 +128,14 @@ std::string Responder::buildFilePath(const ServerConfig &server, const LocationC
 	else
 		return rootPath + "/" + realPart;
 }
+
+bool Responder::setBodyFromFile(HttpResponse &resp, const std::string &filePath)
+{
+	std::ifstream ifs(filePath.c_str(), std::ios::binary);
+	if (!ifs.is_open())
+		return false;
+	std::ostringstream oss;
+	oss << ifs.rdbuf();
+	resp.setBody(oss.str());
+	return true;
+}
