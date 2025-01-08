@@ -14,6 +14,7 @@
 #include <cstdlib>
 #include "HttpParser.hpp"
 #include <algorithm>
+#include "LocationConfig.hpp"
 
 class WebServ
 {

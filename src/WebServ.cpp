@@ -1,6 +1,7 @@
 #include "WebServ.hpp"
 #include "HttpParser.hpp"
 #include "HttpResponse.hpp"
+#include "Responder.hpp"
 
 WebServ::~WebServ() {}
 WebServ::WebServ(const std::vector<ServerConfig> &configs) : _servers(configs)
@@ -72,24 +73,18 @@ void WebServ::start()
 int WebServ::getMaxFd()
 {
 	int max_fd = -1;
-
-	// Если вектор слушающих сокетов не пуст, найдём максимум
 	if (!_listenSockets.empty())
 	{
 		int max_listen_fd = *std::max_element(_listenSockets.begin(), _listenSockets.end());
 		if (max_listen_fd > max_fd)
 			max_fd = max_listen_fd;
 	}
-
-	// Если список клиентских сокетов не пуст, найдём максимум
 	if (!_clientSockets.empty())
 	{
-		// std::list<int> тоже поддерживает итераторы для std::max_element
 		int max_client_fd = *std::max_element(_clientSockets.begin(), _clientSockets.end());
 		if (max_client_fd > max_fd)
 			max_fd = max_client_fd;
 	}
-
 	return max_fd;
 }
 
@@ -144,17 +139,15 @@ void WebServ::mainLoop()
 			int fd = *it;
 			size_t serverIndex = _clientToServerIndex[fd];
 			ServerConfig &server = _servers[serverIndex];
-			std::cout << "Server: " << server.getHost() << ":" << server.getPort() << std::endl;
 			if (FD_ISSET(fd, &readfds))
 			{
 				char buf[1024];
 				int bytes = recv(fd, buf, sizeof(buf), 0);
 				if (bytes <= 0)
 				{
-					// Клиент закрыл соединение или ошибка
 					close(fd);
-					_parsers.erase(fd);				 // Удаляем парсер
-					it = _clientSockets.erase(it); // Удаляем сокет
+					_parsers.erase(fd);
+					it = _clientSockets.erase(it);
 				}
 				else
 				{

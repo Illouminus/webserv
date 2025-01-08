@@ -22,4 +22,6 @@ public:
 	size_t max_body_size;
 
 	void reset();
+
+	std::string getRoot() const;
 };
