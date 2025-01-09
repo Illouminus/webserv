@@ -2,7 +2,7 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
-#include <sys/stat.h> // для проверки директории
+#include <sys/stat.h>
 
 Responder::Responder() {};
 Responder::~Responder() {};
@@ -10,35 +10,21 @@ Responder::~Responder() {};
 HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &server)
 {
 	HttpResponse resp;
-
-	// 1) Найдём локацию
 	std::string path = parser.getPath();
-	std::cout << path << std::endl;
 	const LocationConfig *loc = findLocation(server, path);
-
-	// 2) Проверим метод
-	// Сформируем список методов, разрешённых в loc->methods (если не пусто), иначе server.methods
 	HttpMethod method = parser.getMethod();
-
-	// Соберём строку Allow (например "GET, POST, DELETE")
 	std::string allowHeader;
 	if (!isMethodAllowed(method, server, loc, allowHeader))
 	{
 		resp.setStatus(405, "Method Not Allowed");
 		resp.setHeader("Content-Type", "text/plain");
-		resp.setHeader("Allow", allowHeader); // «Allow: GET, POST, ...»
+		resp.setHeader("Allow", allowHeader);
 		resp.setBody("405 Method Not Allowed\n");
-		// Попробуем подставить свою error_page[405], если хотите
 		handleErrorPage(resp, server, 405);
 		return resp;
 	}
-
-	// 3) Если у локации есть redirect (return 301 /newpath):
-	// Предположим loc->redirect == "301 /newpath"
 	if (loc && !loc->redirect.empty())
 	{
-		// Парсим "301 /newpath"
-		// это возможно "302 /other" etc
 		std::istringstream iss(loc->redirect);
 		int code;
 		std::string newPath;
@@ -50,26 +36,19 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 		return resp;
 	}
 
-	// 4) Строим физический путь
 	std::string realFilePath = buildFilePath(server, loc, path);
 	std::cout << "realFilePath: " << realFilePath << std::endl;
 
-	// 5) Проверим, существует ли файл
-	// Если это директория, и autoindex on/off и index...
-	// (Упрощённо ниже)
 	struct stat st;
 	if (stat(realFilePath.c_str(), &st) == 0)
 	{
-		// Проверка, не является ли директорией
 		if (S_ISDIR(st.st_mode))
 		{
-			// Если loc->index не пуст, попробуем attach index
 			if (loc && !loc->index.empty())
 			{
 				if (realFilePath[realFilePath.size() - 1] != '/')
 					realFilePath += "/";
 				realFilePath += loc->index;
-				// проверим снова stat
 				if (stat(realFilePath.c_str(), &st) == 0 && !S_ISDIR(st.st_mode))
 				{
 					// ок, есть index
