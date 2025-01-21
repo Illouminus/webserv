@@ -320,6 +320,7 @@ HttpResponse Responder::handlePost(const HttpParser &parser,
 {
 	HttpResponse resp;
 
+	std::cout << loc->upload_store << "\n";
 	if (!loc || loc->upload_store.empty())
 	{
 		resp.setStatus(403, "Forbidden");
