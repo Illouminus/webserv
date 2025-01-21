@@ -273,15 +273,12 @@ HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig 
 {
 	HttpResponse resp;
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
-	std::cout << "Requested file: " << reqPath << "\n";
-	std::cout << "Deleting file: " << realFilePath << "\n";
 
 	struct stat st;
 	if (stat(realFilePath.c_str(), &st) == 0)
 	{
 		if (S_ISDIR(st.st_mode))
 		{
-			// Запрет удалять директории?
 			resp.setStatus(403, "Forbidden");
 			resp.setBody("Cannot delete a directory\n");
 			return resp;
@@ -314,9 +311,7 @@ std::string Responder::extractFilename(const std::string &reqPath)
 	return reqPath.substr(pos + 1);
 }
 
-HttpResponse Responder::handlePost(const HttpParser &parser,
-											  const LocationConfig *loc,
-											  const std::string &reqPath)
+HttpResponse Responder::handlePost(const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath)
 {
 	HttpResponse resp;
 
