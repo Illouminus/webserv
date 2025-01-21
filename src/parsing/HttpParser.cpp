@@ -37,21 +37,21 @@ HttpParser &HttpParser::operator=(const HttpParser &other)
 	return *this;
 }
 
-void HttpParser::appendData(const std::string &data)
+void HttpParser::appendData(const std::string &data, size_t maxBodySize)
 {
-	// Добавляем кусок (data) к общему буферу
 	_buffer += data;
 
-	// Если мы ещё парсим заголовки, попробуем их обработать
+	if (_buffer.size() > maxBodySize)
+	{
+		_status = PARSING_ERROR;
+		return;
+	}
+
 	if (_status == PARSING_HEADERS)
-	{
 		parseHeaders();
-	}
-	// Если мы уже дошли до тела, попробуем дочитать тело
+
 	if (_status == PARSING_BODY)
-	{
 		parseBody();
-	}
 }
 
 // Проверяем, закончен ли парсинг полностью
@@ -212,7 +212,7 @@ void HttpParser::parseHeaderLine(const std::string &line)
 
 	// Trim пробелы
 	// Можно написать helper-функцию trim
-// trim trailing whitespace (аналог pop_back()):
+	// trim trailing whitespace (аналог pop_back()):
 	while (!key.empty() && std::isspace(static_cast<unsigned char>(key[key.size() - 1])))
 	{
 		key.erase(key.size() - 1, 1);
@@ -223,7 +223,6 @@ void HttpParser::parseHeaderLine(const std::string &line)
 	{
 		value.erase(0, 1);
 	}
-
 
 	// Приводим key в нижний регистр для удобства (часто делают так)
 	std::transform(key.begin(), key.end(), key.begin(), ::tolower);
@@ -243,4 +242,9 @@ void HttpParser::parseBody()
 		_status = COMPLETE;
 	}
 	// Иначе ждем следующего вызова appendData()
+}
+
+bool HttpParser::hasError() const
+{
+	return (_status == PARSING_ERROR);
 }

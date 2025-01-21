@@ -1,5 +1,4 @@
 #pragma once
-
 #include <string>
 #include <vector>
 #include <map>
@@ -19,7 +18,8 @@ enum ParserStatus
 {
 	PARSING_HEADERS,
 	PARSING_BODY,
-	COMPLETE
+	COMPLETE,
+	PARSING_ERROR
 };
 
 class HttpParser
@@ -38,9 +38,10 @@ private:
 	std::map<std::string, std::string> _headers;
 	std::string _body;
 
-	// Вспомогательные поля
 	size_t _contentLength; // Если указано в заголовках
 	bool _headerParsed;	  // Флаг, что первая строка (Request Line) уже разобрана
+
+	// size_t _contentSize;
 
 public:
 	HttpParser();
@@ -49,7 +50,7 @@ public:
 	~HttpParser();
 
 	// Добавляет кусок данных и пытается распарсить
-	void appendData(const std::string &data);
+	void appendData(const std::string &data, size_t maxBodySize);
 
 	// Проверяем, закончен ли парсинг (полностью)
 	bool isComplete() const;
@@ -62,6 +63,7 @@ public:
 	std::string getVersion() const;
 	std::map<std::string, std::string> getHeaders() const;
 	std::string getBody() const;
+	bool hasError() const;
 
 private:
 	void parseRequestLine(const std::string &line);

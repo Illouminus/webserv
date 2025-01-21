@@ -268,11 +268,15 @@ void Responder::handleErrorPage(HttpResponse &resp, ServerConfig &server, int co
 	// Ищем в server.error_pages
 	if (server.error_pages.find(code) != server.error_pages.end())
 	{
+		std::string rootError = server.root;
 		std::string errorPath = server.error_pages[code];
+		rootError.append(errorPath);
+		std::cout << "Error path : " << rootError << std::endl;
+
 		// Обычно путь может быть абсолютным или относительным root (зависит от логики)
 		// Для упрощения предположим, что "error_pages" — абсолютный путь, или же "root + errorPath".
 		// Попробуем прочитать
-		std::ifstream ifs(errorPath.c_str());
+		std::ifstream ifs(rootError.c_str());
 		if (ifs.is_open())
 		{
 			std::ostringstream oss;
