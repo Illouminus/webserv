@@ -135,9 +135,7 @@ bool Responder::isMethodAllowed(HttpMethod method, const ServerConfig &server, c
 	return false;
 }
 
-std::string Responder::buildFilePath(const ServerConfig &server,
-												 const LocationConfig *loc,
-												 const std::string &reqPath)
+std::string Responder::buildFilePath(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
 {
 	std::string rootPath;
 	if (loc && !loc->root.empty())
@@ -196,10 +194,7 @@ void Responder::handleErrorPage(HttpResponse &resp, ServerConfig &server, int co
 	}
 }
 
-HttpResponse Responder::handleGet(
-	 ServerConfig &server,
-	 const LocationConfig *loc,
-	 const std::string &reqPath)
+HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
 {
 	HttpResponse resp;
 
@@ -274,17 +269,13 @@ HttpResponse Responder::handleGet(
 	return resp;
 }
 
-HttpResponse Responder::handleDelete(
-	 ServerConfig &server,
-	 const LocationConfig *loc,
-	 const std::string &reqPath)
+HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
 {
 	HttpResponse resp;
-
-	// Строим физический путь (как для GET)
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
+	std::cout << "Requested file: " << reqPath << "\n";
+	std::cout << "Deleting file: " << realFilePath << "\n";
 
-	// Проверяем, существует ли
 	struct stat st;
 	if (stat(realFilePath.c_str(), &st) == 0)
 	{
@@ -295,7 +286,6 @@ HttpResponse Responder::handleDelete(
 			resp.setBody("Cannot delete a directory\n");
 			return resp;
 		}
-		// Удаляем
 		if (std::remove(realFilePath.c_str()) == 0)
 		{
 			// OK
@@ -310,7 +300,6 @@ HttpResponse Responder::handleDelete(
 	}
 	else
 	{
-		// Не найден
 		resp.setStatus(404, "Not Found");
 		resp.setBody("File not found\n");
 	}
@@ -319,16 +308,9 @@ HttpResponse Responder::handleDelete(
 
 std::string Responder::extractFilename(const std::string &reqPath)
 {
-	// Пример: reqPath = "/upload/something.jpg"
-	// нам нужно "something.jpg"
-	// Ищем последний '/'
 	size_t pos = reqPath.rfind('/');
 	if (pos == std::string::npos)
-	{
-		// Нет слэша, значит сама строка
 		return reqPath;
-	}
-	// Возвращаем всё после последнего '/'
 	return reqPath.substr(pos + 1);
 }
 
@@ -338,31 +320,20 @@ HttpResponse Responder::handlePost(const HttpParser &parser,
 {
 	HttpResponse resp;
 
-	// Проверяем, есть ли в локации upload_store
 	if (!loc || loc->upload_store.empty())
 	{
-		// Не разрешено загружать
 		resp.setStatus(403, "Forbidden");
 		resp.setBody("Upload not allowed\n");
 		return resp;
 	}
+	std::string filename = extractFilename(reqPath);
 
-	// Из reqPath, например "/upload/something.jpg", попробуем извлечь "something.jpg"
-	// (упрощенная логика)
-	std::string filename = extractFilename(reqPath); // см. пример реализации ниже
-
-	std::cout << "Uploading file: " << filename << "\n";
-
-	// Формируем полный путь: loc->upload_store + "/" + filename
-	// Например "/var/www/uploads/something.jpg"
 	std::string fullUploadPath = loc->upload_store;
 
-	std::cout << "Full path: " << fullUploadPath << "\n";
 	if (!fullUploadPath.empty() && fullUploadPath.back() != '/')
 		fullUploadPath += "/";
 	fullUploadPath += filename;
 
-	// Записываем body в файл
 	std::ofstream ofs(fullUploadPath.c_str(), std::ios::binary);
 	if (!ofs.is_open())
 	{
