@@ -40,4 +40,13 @@ private:
 
 	// Обработка возвращаемой страницы ошибки (если есть настроена error_page)
 	void handleErrorPage(HttpResponse &resp, ServerConfig &server, int code);
+
+	HttpResponse handleGet(ServerConfig &server,
+								  const LocationConfig *loc, const std::string &reqPath);
+	HttpResponse handlePost(const HttpParser &parser,
+									const LocationConfig *loc, const std::string &reqPath);
+	HttpResponse handleDelete(ServerConfig &server,
+									  const LocationConfig *loc, const std::string &reqPath);
+
+	std::string extractFilename(const std::string &reqPath);
 };

@@ -209,7 +209,6 @@ void WebServ::handleClientSockets(fd_set &readfds, Responder &responder)
 				_parsers[fd].appendData(std::string(buf, bytes), server.max_body_size);
 				if (_parsers[fd].hasError())
 				{
-					// Сформируем 413
 					HttpResponse resp;
 					resp.setStatus(413, "Payload Too Large");
 					resp.setHeader("Content-Type", "text/plain");
