@@ -22,6 +22,10 @@ public:
 	// Возвращаем готовый HttpResponse
 	HttpResponse handleRequest(const HttpParser &parser, ServerConfig &server);
 
+		HttpResponse makeErrorResponse(int code, const std::string &reason, 
+								   const ServerConfig &server,
+                                   const std::string &defaultMessage);
+
 private:
 	// Вспомогательная функция: находим нужную LocationConfig*
 	const LocationConfig *findLocation(const ServerConfig &server, const std::string &path);
@@ -48,5 +52,8 @@ private:
 	HttpResponse handleDelete(ServerConfig &server,
 									  const LocationConfig *loc, const std::string &reqPath);
 
+
+
 	std::string extractFilename(const std::string &reqPath);
+
 };

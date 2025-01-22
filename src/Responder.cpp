@@ -17,14 +17,8 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 	HttpMethod method = parser.getMethod();
 	std::string allowHeader;
 	if (!isMethodAllowed(method, server, loc, allowHeader))
-	{
-		resp.setStatus(405, "Method Not Allowed");
-		resp.setHeader("Content-Type", "text/plain");
-		resp.setHeader("Allow", allowHeader);
-		resp.setBody("405 Method Not Allowed\n");
-		handleErrorPage(resp, server, 405);
-		return resp;
-	}
+		return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
+	
 	if (loc && !loc->redirect.empty())
 	{
 		std::istringstream iss(loc->redirect);
@@ -45,9 +39,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 		return handleGet(server, loc, path);
 	//  else if (method == HTTP_METHOD_PUT) etc.
 
-	resp.setStatus(501, "Not Implemented");
-	resp.setBody("Method not implemented\n");
-	return resp;
+	return makeErrorResponse(501, "Not Implemented", server, "Method not implemented");
 }
 
 const LocationConfig *Responder::findLocation(const ServerConfig &srv, const std::string &path)
@@ -143,7 +135,7 @@ std::string Responder::buildFilePath(const ServerConfig &server, const LocationC
 	else
 		rootPath = server.root;
 
-	if (rootPath.size() > 1 && rootPath.back() == '/')
+	if (rootPath.size() > 1 && rootPath[rootPath.size() - 1] == '/')
 		rootPath.erase(rootPath.size() - 1);
 
 	std::string realPart = reqPath;
@@ -217,10 +209,11 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 				{
 					// Возможно autoindex
 					// Или 403/404
-					resp.setStatus(403, "Forbidden");
-					resp.setBody("Directory listing is forbidden\n");
-					handleErrorPage(resp, server, 403);
-					return resp;
+					// resp.setStatus(403, "Forbidden");
+					// resp.setBody("Directory listing is forbidden\n");
+					// handleErrorPage(resp, server, 403);
+					// return resp;
+					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
 				}
 			}
 			else
@@ -228,10 +221,11 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 				// autoindex? Если off -> 403
 				if (!server.autoindex && !(loc && loc->autoindex))
 				{
-					resp.setStatus(403, "Forbidden");
-					resp.setBody("Directory listing is forbidden\n");
-					handleErrorPage(resp, server, 403);
-					return resp;
+					// resp.setStatus(403, "Forbidden");
+					// resp.setBody("Directory listing is forbidden\n");
+					// handleErrorPage(resp, server, 403);
+					// return resp;
+					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
 				}
 				else
 				{
@@ -248,10 +242,11 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 		if (!setBodyFromFile(resp, realFilePath))
 		{
 			// не смогли прочитать
-			resp.setStatus(403, "Forbidden");
-			resp.setBody("Cannot read file\n");
-			handleErrorPage(resp, server, 403);
-			return resp;
+			// resp.setStatus(403, "Forbidden");
+			// resp.setBody("Cannot read file\n");
+			// handleErrorPage(resp, server, 403);
+			// return resp;
+			return makeErrorResponse(403, "Forbidden", server, "Cannot read file\n");
 		}
 
 		resp.setStatus(200, "OK");
@@ -262,9 +257,10 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 	else
 	{
 		// Файл не найден
-		resp.setStatus(404, "Not Found");
-		resp.setBody("File Not Found\n");
-		handleErrorPage(resp, server, 404);
+		// resp.setStatus(404, "Not Found");
+		// resp.setBody("File Not Found\n");
+		// handleErrorPage(resp, server, 404);
+		return makeErrorResponse(404, "Not Found", server, "File Not Found\n");
 	}
 	return resp;
 }
@@ -326,7 +322,7 @@ HttpResponse Responder::handlePost(const HttpParser &parser, const LocationConfi
 
 	std::string fullUploadPath = loc->upload_store;
 
-	if (!fullUploadPath.empty() && fullUploadPath.back() != '/')
+	if (!fullUploadPath.empty() && fullUploadPath[fullUploadPath.size() - 1] != '/')
 		fullUploadPath += "/";
 	fullUploadPath += filename;
 
@@ -345,4 +341,40 @@ HttpResponse Responder::handlePost(const HttpParser &parser, const LocationConfi
 	resp.setHeader("Content-Type", "text/plain");
 	resp.setBody("File uploaded successfully\n");
 	return resp;
+}
+
+
+
+HttpResponse Responder::makeErrorResponse(int code,
+                                          const std::string &reason,
+                                          const ServerConfig &server,
+                                          const std::string &defaultMessage)
+{
+    HttpResponse resp;
+    resp.setStatus(code, reason);
+    resp.setHeader("Content-Type", "text/html");
+
+    std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+    if (it != server.error_pages.end())
+    {
+        std::string errorFilePath = server.root + it->second;
+        std::ifstream ifs(errorFilePath.c_str());
+        if (ifs.is_open())
+        {
+            std::ostringstream oss;
+            oss << ifs.rdbuf();
+            resp.setBody(oss.str());
+            return resp;
+        }
+    }
+    std::ostringstream oss;
+    oss << "<!DOCTYPE html>\n"
+        << "<html>\n"
+        << "<head><title>" << code << " " << reason << "</title></head>\n"
+        << "<body>\n"
+        << "<h1>" << code << " " << reason << "</h1>\n"
+        << "<p>" << defaultMessage << "</p>\n"
+        << "</body>\n</html>";
+    resp.setBody(oss.str());
+    return resp;
 }

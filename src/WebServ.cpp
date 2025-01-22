@@ -209,13 +209,7 @@ void WebServ::handleClientSockets(fd_set &readfds, Responder &responder)
 				_parsers[fd].appendData(std::string(buf, bytes), server.max_body_size);
 				if (_parsers[fd].hasError())
 				{
-					HttpResponse resp;
-					resp.setStatus(413, "Payload Too Large");
-					resp.setHeader("Content-Type", "text/plain");
-					resp.setBody("Request Entity Too Large\n");
-
-					// (Опционально) подгружаем custom error page, если есть:
-					// responder.handleErrorPage(resp, server, 413);
+					HttpResponse resp = responder.makeErrorResponse(413, "Payload Too Large", server, "Request Entity Too Large\n");
 					std::string rawResponse = resp.toString();
 					send(fd, rawResponse.c_str(), rawResponse.size(), 0);
 					close(fd);
