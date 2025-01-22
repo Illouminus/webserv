@@ -191,7 +191,9 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 	HttpResponse resp;
 
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
+
 	struct stat st;
+
 	if (stat(realFilePath.c_str(), &st) == 0)
 	{
 		if (S_ISDIR(st.st_mode))
@@ -206,27 +208,13 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 					// ок, есть index
 				}
 				else
-				{
-					// Возможно autoindex
-					// Или 403/404
-					// resp.setStatus(403, "Forbidden");
-					// resp.setBody("Directory listing is forbidden\n");
-					// handleErrorPage(resp, server, 403);
-					// return resp;
 					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
-				}
 			}
 			else
 			{
 				// autoindex? Если off -> 403
 				if (!server.autoindex && !(loc && loc->autoindex))
-				{
-					// resp.setStatus(403, "Forbidden");
-					// resp.setBody("Directory listing is forbidden\n");
-					// handleErrorPage(resp, server, 403);
-					// return resp;
 					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
-				}
 				else
 				{
 					// сделать autoindex listing
@@ -240,28 +228,13 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 		}
 		// Файл существует, попытаемся отдать
 		if (!setBodyFromFile(resp, realFilePath))
-		{
-			// не смогли прочитать
-			// resp.setStatus(403, "Forbidden");
-			// resp.setBody("Cannot read file\n");
-			// handleErrorPage(resp, server, 403);
-			// return resp;
 			return makeErrorResponse(403, "Forbidden", server, "Cannot read file\n");
-		}
-
 		resp.setStatus(200, "OK");
-		// Определим Content-Type по расширению
 		std::string ctype = getContentTypeByExtension(realFilePath);
 		resp.setHeader("Content-Type", ctype);
 	}
 	else
-	{
-		// Файл не найден
-		// resp.setStatus(404, "Not Found");
-		// resp.setBody("File Not Found\n");
-		// handleErrorPage(resp, server, 404);
 		return makeErrorResponse(404, "Not Found", server, "File Not Found\n");
-	}
 	return resp;
 }
 
