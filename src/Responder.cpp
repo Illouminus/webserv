@@ -1,4 +1,5 @@
 #include "Responder.hpp"
+#include "AutoIndex.cpp"
 #include <sstream>
 #include <fstream>
 #include <algorithm>
@@ -18,7 +19,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 	std::string allowHeader;
 	if (!isMethodAllowed(method, server, loc, allowHeader))
 		return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
-	
+
 	if (loc && !loc->redirect.empty())
 	{
 		std::istringstream iss(loc->redirect);
@@ -50,7 +51,6 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const std
 	for (size_t i = 0; i < srv.locations.size(); i++)
 	{
 		const std::string &locPath = srv.locations[i].path;
-		// Сравнение префикса:
 		if (path.compare(0, locPath.size(), locPath) == 0)
 		{
 			if (locPath.size() > bestMatch)
@@ -203,6 +203,8 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 				if (realFilePath[realFilePath.size() - 1] != '/')
 					realFilePath += "/";
 				realFilePath += loc->index;
+				std::cout << "AUTOINDEX" << server.autoindex << loc->autoindex << "\n";
+				std::cout << "RealFilePath: " << realFilePath << "\n";
 				if (stat(realFilePath.c_str(), &st) == 0 && !S_ISDIR(st.st_mode))
 				{
 					// ок, есть index
@@ -212,21 +214,19 @@ HttpResponse Responder::handleGet(ServerConfig &server, const LocationConfig *lo
 			}
 			else
 			{
-				// autoindex? Если off -> 403
 				if (!server.autoindex && !(loc && loc->autoindex))
 					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
 				else
 				{
-					// сделать autoindex listing
-					// (пример не реализован)
+					std::string html = makeAutoIndexPage(realFilePath, reqPath);
+					HttpResponse resp;
 					resp.setStatus(200, "OK");
 					resp.setHeader("Content-Type", "text/html");
-					resp.setBody("<html><body><h1>Index of directory ...</h1></body></html>");
+					resp.setBody(html);
 					return resp;
 				}
 			}
 		}
-		// Файл существует, попытаемся отдать
 		if (!setBodyFromFile(resp, realFilePath))
 			return makeErrorResponse(403, "Forbidden", server, "Cannot read file\n");
 		resp.setStatus(200, "OK");
@@ -316,38 +316,36 @@ HttpResponse Responder::handlePost(const HttpParser &parser, const LocationConfi
 	return resp;
 }
 
-
-
 HttpResponse Responder::makeErrorResponse(int code,
-                                          const std::string &reason,
-                                          const ServerConfig &server,
-                                          const std::string &defaultMessage)
+														const std::string &reason,
+														const ServerConfig &server,
+														const std::string &defaultMessage)
 {
-    HttpResponse resp;
-    resp.setStatus(code, reason);
-    resp.setHeader("Content-Type", "text/html");
+	HttpResponse resp;
+	resp.setStatus(code, reason);
+	resp.setHeader("Content-Type", "text/html");
 
-    std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
-    if (it != server.error_pages.end())
-    {
-        std::string errorFilePath = server.root + it->second;
-        std::ifstream ifs(errorFilePath.c_str());
-        if (ifs.is_open())
-        {
-            std::ostringstream oss;
-            oss << ifs.rdbuf();
-            resp.setBody(oss.str());
-            return resp;
-        }
-    }
-    std::ostringstream oss;
-    oss << "<!DOCTYPE html>\n"
-        << "<html>\n"
-        << "<head><title>" << code << " " << reason << "</title></head>\n"
-        << "<body>\n"
-        << "<h1>" << code << " " << reason << "</h1>\n"
-        << "<p>" << defaultMessage << "</p>\n"
-        << "</body>\n</html>";
-    resp.setBody(oss.str());
-    return resp;
+	std::map<int, std::string>::const_iterator it = server.error_pages.find(code);
+	if (it != server.error_pages.end())
+	{
+		std::string errorFilePath = server.root + it->second;
+		std::ifstream ifs(errorFilePath.c_str());
+		if (ifs.is_open())
+		{
+			std::ostringstream oss;
+			oss << ifs.rdbuf();
+			resp.setBody(oss.str());
+			return resp;
+		}
+	}
+	std::ostringstream oss;
+	oss << "<!DOCTYPE html>\n"
+		 << "<html>\n"
+		 << "<head><title>" << code << " " << reason << "</title></head>\n"
+		 << "<body>\n"
+		 << "<h1>" << code << " " << reason << "</h1>\n"
+		 << "<p>" << defaultMessage << "</p>\n"
+		 << "</body>\n</html>";
+	resp.setBody(oss.str());
+	return resp;
 }
