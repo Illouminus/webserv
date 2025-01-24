@@ -24,6 +24,7 @@ enum ParserStatus
 {
 	PARSING_HEADERS,
 	PARSING_BODY,
+	PARSING_CHUNKED,
 	COMPLETE,
 	PARSING_ERROR
 };
@@ -80,4 +81,5 @@ private:
 	void parseHeaderLine(const std::string &line);
 	void parseHeaders();
 	void parseBody();
+	void parseChunkedBody();
 };

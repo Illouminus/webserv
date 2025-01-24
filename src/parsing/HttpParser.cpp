@@ -113,6 +113,14 @@ void HttpParser::parseHeaders()
 			// Headers are parsed and we can check if there is a body
 			// If there is a body, then we need to parse it
 			// Else we can set the status to COMPLETE and return
+
+			if(_headers.count("transfer-encoding") && _headers["transfer-encoding"] == "chunked")
+			{
+				_status = PARSING_CHUNKED;
+				//parseChunkedBody();
+				return;
+			}
+
 			if (_headers.count("content-length"))
 			{
 				_contentLength = static_cast<size_t>(std::atoi(_headers["content-length"].c_str()));
@@ -248,4 +256,10 @@ bool HttpParser::hasError() const
 ParserError HttpParser::getErrorCode() const
 {
 	return _errorCode;
+}
+
+void HttpParser::parseChunkedBody()
+{
+	
+
 }
