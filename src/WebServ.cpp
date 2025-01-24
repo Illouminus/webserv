@@ -206,10 +206,14 @@ void WebServ::handleClientSockets(fd_set &readfds, Responder &responder)
 			{
 				size_t serverIndex = _clientToServerIndex[fd];
 				ServerConfig &server = _servers[serverIndex];
+				HttpResponse resp;
 				_parsers[fd].appendData(std::string(buf, bytes), server.max_body_size);
 				if (_parsers[fd].hasError())
 				{
-					HttpResponse resp = responder.makeErrorResponse(413, "Payload Too Large", server, "Request Entity Too Large\n");
+					if(_parsers[fd].getErrorCode() == ERR_400)
+						resp = responder.makeErrorResponse(413, "Payload Too Large", server, "Request Entity Too Large\n");
+					else
+						resp = responder.makeErrorResponse(400, "Bad Request", server, "Bad Request\n");
 					std::string rawResponse = resp.toString();
 					send(fd, rawResponse.c_str(), rawResponse.size(), 0);
 					close(fd);

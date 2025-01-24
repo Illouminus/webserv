@@ -14,6 +14,12 @@ enum HttpMethod
 	HTTP_METHOD_DELETE,
 };
 
+enum ParserError {
+	NO_ERROR,
+	ERR_400,
+	ERR_413
+};
+
 enum ParserStatus
 {
 	PARSING_HEADERS,
@@ -27,6 +33,7 @@ class HttpParser
 private:
 	// Накопительный буфер для входящих данных
 	std::string _buffer;
+	ParserError _errorCode; 
 
 	// Текущее состояние парсера
 	ParserStatus _status;
@@ -64,6 +71,7 @@ public:
 	std::map<std::string, std::string> getHeaders() const;
 	std::string getBody() const;
 	bool hasError() const;
+	ParserError getErrorCode() const;
 
 private:
 	void parseRequestLine(const std::string &line);

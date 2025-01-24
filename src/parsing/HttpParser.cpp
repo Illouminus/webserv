@@ -44,6 +44,7 @@ void HttpParser::appendData(const std::string &data, size_t maxBodySize)
 	if (_buffer.size() > maxBodySize)
 	{
 		_status = PARSING_ERROR;
+		_errorCode = ERR_413;
 		return;
 	}
 
@@ -99,6 +100,7 @@ void HttpParser::parseHeaders()
 		if (pos == std::string::npos)
 		{
 			_status = PARSING_ERROR;
+			_errorCode = ERR_400;
 			return;
 		}
 
@@ -149,10 +151,10 @@ void HttpParser::parseRequestLine(const std::string &line)
 	std::istringstream iss(line);
 	std::string methodStr, pathStr, versionStr;
 	if (!(iss >> methodStr >> pathStr >> versionStr)) {
-    _status = PARSING_ERROR;
-    return;
+   		_status = PARSING_ERROR;
+		_errorCode = ERR_400;
+    	return;
 }
-
 	if (methodStr == "GET")
 		_method = HTTP_METHOD_GET;
 	else if (methodStr == "POST")
@@ -168,7 +170,8 @@ void HttpParser::parseRequestLine(const std::string &line)
 	_version = versionStr; // "HTTP/1.1"
 	if (versionStr != "HTTP/1.1" && versionStr != "HTTP/1.0") {
    		_status = PARSING_ERROR;
-    return;
+		_errorCode = ERR_400;
+    	return;
 }
 }
 
@@ -202,29 +205,25 @@ bool HttpParser::isKeepAlive() const
 
 void HttpParser::parseHeaderLine(const std::string &line)
 {
-	// Пример: "Host: localhost:8080"
+	// For example: "Host: localhost:8080"
 	size_t pos = line.find(':');
 	if (pos == std::string::npos)
-		return; // Невалидный заголовок или неформатный; в реальном сервере -> 400 Bad Request
+		{
+			_status = PARSING_ERROR; // 400 Bad Request;
+			_errorCode = ERR_400;
+			return;
+		}
 
 	std::string key = line.substr(0, pos);
 	std::string value = line.substr(pos + 1);
-
-	// Trim пробелы
-	// Можно написать helper-функцию trim
-	// trim trailing whitespace (аналог pop_back()):
+	// trim trailing whitespace
 	while (!key.empty() && std::isspace(static_cast<unsigned char>(key[key.size() - 1])))
-	{
 		key.erase(key.size() - 1, 1);
-	}
-
-	// trim leading whitespace (аналог front()):
+	// trim leading whitespace
 	while (!value.empty() && std::isspace(static_cast<unsigned char>(value[0])))
-	{
 		value.erase(0, 1);
-	}
 
-	// Приводим key в нижний регистр для удобства (часто делают так)
+	// To lowercase
 	std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
 	_headers[key] = value;
@@ -232,19 +231,21 @@ void HttpParser::parseHeaderLine(const std::string &line)
 
 void HttpParser::parseBody()
 {
-	// Если уже есть достаточное количество байт для тела, дочитываем
 	if (_buffer.size() >= _contentLength)
 	{
 		_body = _buffer.substr(0, _contentLength);
 		_buffer.erase(0, _contentLength);
 
-		// Поскольку дочитали тело, завершаем
 		_status = COMPLETE;
 	}
-	// Иначе ждем следующего вызова appendData()
 }
 
 bool HttpParser::hasError() const
 {
 	return (_status == PARSING_ERROR);
+}
+
+ParserError HttpParser::getErrorCode() const
+{
+	return _errorCode;
 }
