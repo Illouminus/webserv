@@ -261,6 +261,22 @@ ParserError HttpParser::getErrorCode() const
 	return _errorCode;
 }
 
+
+long HttpParser::parseHexNumber(const std::string &hexStr)
+{
+    char *endptr = NULL;
+    long val = std::strtol(hexStr.c_str(), &endptr, 16);
+    if (*endptr != '\0') {
+        // Not a valid hex number
+        return -1;
+    }
+    if (val < 0) {
+        // Negative number
+        return -1;
+    }
+    return val;
+}
+
 void HttpParser::parseChunkedBody(size_t maxBodySize)
 {
 	
@@ -276,7 +292,67 @@ void HttpParser::parseChunkedBody(size_t maxBodySize)
 		// 2) Get the chunk size in hex
 
 		std::string hexLen = _buffer.substr(0, posRN);
-		_buffer.erase(0, posRN + 2);
+		_buffer.erase(0, posRN + 2); // Erase the chunk size and \r\n
+
+		// 3) Convert the hex string to size_t
+
+		long chunkSize = parseHexNumber(hexLen);
+
+		if(chunkSize < 0)
+		{
+			_status = PARSING_ERROR;
+			_errorCode = ERR_501;
+			return;
+		}
+
+		// 4) If chunk size is 0, then this is the last chunk
+
+		if(chunkSize == 0)
+		{
+			_status = COMPLETE;
+			return;
+		}
+
+		// 5) Check if the buffer has enough data to read the chunk
+
+		if(_buffer.size() < static_cast<size_t>(chunkSize) + 2)
+			return; // wait for more data
+
+		// 6) Read the chunk and erase it from the buffer
+
+		std::string chunkData = _buffer.substr(0, chunkSize);
+        _buffer.erase(0, chunkSize);
+
+		if (_buffer.size() < 2)
+        {
+            // The chunk should end with \r\n
+            _status = PARSING_ERROR;
+            _errorCode = ERR_400;
+            return;
+        }
+
+		if (_buffer[0] != '\r' || _buffer[1] != '\n')
+        {
+            // Format error
+            _status = PARSING_ERROR;
+            _errorCode = ERR_400;
+            return;
+        }
+
+		_buffer.erase(0, 2); // Erase the \r\n
+
+		// 7) Append the chunk data to the body
+
+		_body += chunkData;
+
+		// 8) Check if the body size is not too big
+
+		if(_body.size() > maxBodySize)
+		{
+			_status = PARSING_ERROR;
+			_errorCode = ERR_413;
+			return;
+		}
 	}
 
 }

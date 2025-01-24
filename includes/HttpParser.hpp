@@ -17,7 +17,8 @@ enum HttpMethod
 enum ParserError {
 	NO_ERROR,
 	ERR_400,
-	ERR_413
+	ERR_413,
+	ERR_501
 };
 
 enum ParserStatus
@@ -82,4 +83,5 @@ private:
 	void parseHeaders();
 	void parseBody();
 	void parseChunkedBody(size_t maxBodySize);
+	long parseHexNumber(const std::string &hexStr);
 };
