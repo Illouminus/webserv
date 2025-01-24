@@ -210,7 +210,7 @@ void WebServ::handleClientSockets(fd_set &readfds, Responder &responder)
 				_parsers[fd].appendData(std::string(buf, bytes), server.max_body_size);
 				if (_parsers[fd].hasError())
 				{
-					if(_parsers[fd].getErrorCode() == ERR_400)
+					if(_parsers[fd].getErrorCode() == ERR_413)
 						resp = responder.makeErrorResponse(413, "Payload Too Large", server, "Request Entity Too Large\n");
 					else
 						resp = responder.makeErrorResponse(400, "Bad Request", server, "Bad Request\n");

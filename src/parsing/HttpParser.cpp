@@ -102,8 +102,8 @@ void HttpParser::parseHeaders()
 		size_t pos = _buffer.find("\r\n");
 		if (pos == std::string::npos)
 		{
-			_status = PARSING_ERROR;
-			_errorCode = ERR_400;
+			// _status = PARSING_ERROR;
+			// _errorCode = ERR_400;
 			return;
 		}
 
@@ -161,11 +161,12 @@ void HttpParser::parseRequestLine(const std::string &line)
 	// Example: "GET /index.html HTTP/1.1"
 	std::istringstream iss(line);
 	std::string methodStr, pathStr, versionStr;
-	if (!(iss >> methodStr >> pathStr >> versionStr)) {
+	if (!(iss >> methodStr >> pathStr >> versionStr)) 
+	{
    		_status = PARSING_ERROR;
 		_errorCode = ERR_400;
     	return;
-}
+	}
 	if (methodStr == "GET")
 		_method = HTTP_METHOD_GET;
 	else if (methodStr == "POST")
@@ -179,7 +180,8 @@ void HttpParser::parseRequestLine(const std::string &line)
 
 	_path = pathStr;
 	_version = versionStr; // "HTTP/1.1"
-	if (versionStr != "HTTP/1.1" && versionStr != "HTTP/1.0") {
+	if (versionStr != "HTTP/1.1" && versionStr != "HTTP/1.0") 
+	{
    		_status = PARSING_ERROR;
 		_errorCode = ERR_400;
     	return;
@@ -310,6 +312,7 @@ void HttpParser::parseChunkedBody(size_t maxBodySize)
 		if(chunkSize == 0)
 		{
 			_status = COMPLETE;
+			std::cout << _body << std::endl;
 			return;
 		}
 
