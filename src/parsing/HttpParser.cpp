@@ -53,6 +53,9 @@ void HttpParser::appendData(const std::string &data, size_t maxBodySize)
 
 	if (_status == PARSING_BODY)
 		parseBody();
+
+	if(_status == PARSING_CHUNKED)
+		parseChunkedBody(maxBodySize);
 }
 
 bool HttpParser::isComplete() const
