@@ -81,5 +81,5 @@ private:
 	void parseHeaderLine(const std::string &line);
 	void parseHeaders();
 	void parseBody();
-	void parseChunkedBody();
+	void parseChunkedBody(size_t maxBodySize);
 };

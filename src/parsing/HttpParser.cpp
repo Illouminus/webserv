@@ -258,8 +258,8 @@ ParserError HttpParser::getErrorCode() const
 	return _errorCode;
 }
 
-void HttpParser::parseChunkedBody()
+void HttpParser::parseChunkedBody(size_t maxBodySize)
 {
-	
+
 
 }
