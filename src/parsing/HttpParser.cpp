@@ -125,11 +125,11 @@ void HttpParser::parseHeaders()
 			return;
 		}
 
-		// Иначе считываем строку (line) до \r\n
+		// Learn the header line on the left of \r\n
 		std::string line = _buffer.substr(0, pos);
 		_buffer.erase(0, pos + 2);
 
-		// Если не разобрана первая строка (Request Line) — парсим её
+		// If the request line is not parsed yet, then parse it
 		if (!_headerParsed)
 		{
 			parseRequestLine(line);
@@ -137,7 +137,7 @@ void HttpParser::parseHeaders()
 		}
 		else
 		{
-			// Иначе это заголовок "Key: Value"
+			// Otherwise this is a header line KEY : VALUE
 			parseHeaderLine(line);
 		}
 	}
@@ -145,13 +145,14 @@ void HttpParser::parseHeaders()
 
 void HttpParser::parseRequestLine(const std::string &line)
 {
-	// Пример: "GET /index.html HTTP/1.1"
-	// Разобьём по пробелам
+	// Example: "GET /index.html HTTP/1.1"
 	std::istringstream iss(line);
 	std::string methodStr, pathStr, versionStr;
-	iss >> methodStr >> pathStr >> versionStr;
+	if (!(iss >> methodStr >> pathStr >> versionStr)) {
+    _status = PARSING_ERROR;
+    return;
+}
 
-	// Определяем метод
 	if (methodStr == "GET")
 		_method = HTTP_METHOD_GET;
 	else if (methodStr == "POST")
@@ -165,13 +166,16 @@ void HttpParser::parseRequestLine(const std::string &line)
 
 	_path = pathStr;
 	_version = versionStr; // "HTTP/1.1"
+	if (versionStr != "HTTP/1.1" && versionStr != "HTTP/1.0") {
+   		_status = PARSING_ERROR;
+    return;
+}
 }
 
 bool HttpParser::isKeepAlive() const
 {
-	// если _version == "HTTP/1.1", то по умолчанию keep-alive, если не указано close
-	// если _version == "HTTP/1.0", то по умолчанию close, если не указано keep-alive
-
+	//  _version == "HTTP/1.1", default keep-alive, if not specified close
+	//  _version == "HTTP/1.0", default close, if not specified keep-alive
 	std::map<std::string, std::string>::const_iterator it = _headers.find("connection");
 
 	std::string connectionVal;
@@ -182,12 +186,10 @@ bool HttpParser::isKeepAlive() const
 		std::transform(connectionVal.begin(), connectionVal.end(), connectionVal.begin(), ::tolower);
 	}
 
-	// Для упрощения, примем логику:
 	if (_version == "HTTP/1.1")
 	{
 		if (connectionVal == "close")
 			return false;
-		// иначе keep-alive
 		return true;
 	}
 	else // HTTP/1.0
