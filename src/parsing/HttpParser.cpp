@@ -263,6 +263,20 @@ ParserError HttpParser::getErrorCode() const
 
 void HttpParser::parseChunkedBody(size_t maxBodySize)
 {
+	
+	while(_status == PARSING_CHUNKED)
+	{
+		// 1) Find the position of \r\n for the chunk size
 
+		size_t posRN = _buffer.find("\r\n");
+
+		if(posRN == std::string::npos)
+		 return ; // wait for more data
+
+		// 2) Get the chunk size in hex
+
+		std::string hexLen = _buffer.substr(0, posRN);
+		_buffer.erase(0, posRN + 2);
+	}
 
 }
