@@ -59,6 +59,7 @@
 		"algorithm": "cpp",
 		"list": "cpp",
 		"deque": "cpp",
-		"regex": "cpp"
+		"regex": "cpp",
+		"*.tcc": "cpp"
 	}
 }

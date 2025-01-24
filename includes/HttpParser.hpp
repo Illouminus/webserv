@@ -31,22 +31,22 @@ enum ParserStatus
 class HttpParser
 {
 private:
-	// Накопительный буфер для входящих данных
+	// Buffer for incoming data
 	std::string _buffer;
 	ParserError _errorCode; 
 
-	// Текущее состояние парсера
+	// Status of the parser
 	ParserStatus _status;
 
-	// Результат парсинга
+	// Result of parsing
 	HttpMethod _method;
 	std::string _path;
-	std::string _version; // Например, "HTTP/1.1"
+	std::string _version; // For example, "HTTP/1.1"
 	std::map<std::string, std::string> _headers;
 	std::string _body;
 
-	size_t _contentLength; // Если указано в заголовках
-	bool _headerParsed;	  // Флаг, что первая строка (Request Line) уже разобрана
+	size_t _contentLength; // If mentioned in headers
+	bool _headerParsed;	  // Flag about first line of request parsed
 
 	// size_t _contentSize;
 
@@ -56,14 +56,16 @@ public:
 	HttpParser &operator=(const HttpParser &other);
 	~HttpParser();
 
-	// Добавляет кусок данных и пытается распарсить
+	// Add data to the buffer and try to parse it
 	void appendData(const std::string &data, size_t maxBodySize);
 
-	// Проверяем, закончен ли парсинг (полностью)
+	// Check if the parsing is complete 
 	bool isComplete() const;
+
+	// Check if the connection should be kept alive
 	bool isKeepAlive() const;
 
-	// Геттеры для результата парсинга
+	// Getters
 	ParserStatus getStatus() const;
 	HttpMethod getMethod() const;
 	std::string getPath() const;
