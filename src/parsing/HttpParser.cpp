@@ -54,7 +54,6 @@ void HttpParser::appendData(const std::string &data, size_t maxBodySize)
 		parseBody();
 }
 
-// Проверяем, закончен ли парсинг полностью
 bool HttpParser::isComplete() const
 {
 	return (_status == COMPLETE);
@@ -92,36 +91,35 @@ std::string HttpParser::getBody() const
 
 void HttpParser::parseHeaders()
 {
-	// Ищем позицию пустой строки \r\n\r\n, которая отделяет заголовки от тела
-	// Но поскольку мы хотим построчно считывать, пойдём в цикле
+	// Find position of \r\n\r\n, which separates headers from body
 	while (true)
 	{
-		// Ищем первую \r\n
+		// Looking for the first occurence of \r\n
 		size_t pos = _buffer.find("\r\n");
 		if (pos == std::string::npos)
 		{
-			// Нет целой строки, ждём прихода новых данных
+			_status = PARSING_ERROR;
 			return;
 		}
 
-		// Если \r\n на самом начале, значит пустая строка (конец заголовков)
+		// If \r\n is at the beginning of the buffer, then headers are parsed
 		if (pos == 0)
 		{
-			// Убираем "\r\n" из буфера
+			// Errase "\r\n" from the buffer
 			_buffer.erase(0, 2);
 
-			// Заголовки разобраны, переходим либо к телу, либо завершаем
-			// Если есть Content-Length, переходим к PARSING_BODY
-			// Иначе считаем, что тело = 0, значит COMPLETE
+			// Headers are parsed and we can check if there is a body
+			// If there is a body, then we need to parse it
+			// Else we can set the status to COMPLETE and return
 			if (_headers.count("content-length"))
 			{
 				_contentLength = static_cast<size_t>(std::atoi(_headers["content-length"].c_str()));
 				_status = PARSING_BODY;
-				parseBody(); // попробуем сразу распарсить если данные уже есть
+				parseBody(); 
 			}
 			else
 			{
-				// Нет Content-Length, возможно GET-запрос без тела
+				// Don't have content length (GET probably), so we can set the status to COMPLETE
 				_status = COMPLETE;
 			}
 			return;
