@@ -8,6 +8,9 @@
 
 // 1) Считаем метод и длину
 $method = getenv("REQUEST_METHOD");
+// print method and content length
+echo "Method: $method\n";
+echo "Content-Length: " . getenv("CONTENT_LENGTH") . "\n";
 $content_length = getenv("CONTENT_LENGTH");
 
 // 2) Если POST/PUT, прочитаем тело

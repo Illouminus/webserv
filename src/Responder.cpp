@@ -451,13 +451,7 @@ HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig 
  *
  * Returns: HttpResponse with the CGI output, or an error (500, etc.)
  */
-/**
- * handleCgiMulti()
- * A more production-like CGI handling method that:
- *  - Figures out which interpreter to use based on file extension (.php, .sh, etc.)
- *  - Sets multiple environment variables: REQUEST_METHOD, CONTENT_LENGTH, CONTENT_TYPE, QUERY_STRING, SCRIPT_FILENAME, etc.
- *  - Reads from child stdout, returns as HttpResponse.
- */
+
 HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &parser,
 											 const LocationConfig *loc,
 											 const std::string &reqPath)
@@ -554,6 +548,8 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 	}
 	// Add "QUERY_STRING=..."
 	envVec.push_back("QUERY_STRING=" + queryPart);
+	envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	envVec.push_back("REDIRECT_STATUS=200");
 
 	// Additional environment (SERVER_NAME, SERVER_SOFTWARE, etc.) can be added
 	// envVec.push_back("SERVER_NAME=localhost");
@@ -570,8 +566,11 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 	std::vector<char *> args;
 	args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
 	args.push_back(const_cast<char *>(scriptPath.c_str()));
-	envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envVec.push_back("REDIRECT_STATUS=200");
+
+	for (size_t i = 0; i < args.size(); i++)
+	{
+		std::cout << args[i] << std::endl;
+	}
 	args.push_back(NULL);
 
 	// 5) Prepare pipes
