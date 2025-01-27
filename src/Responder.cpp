@@ -4,22 +4,35 @@
 #include <fstream>
 #include <algorithm>
 #include <sys/stat.h>
+#include <unistd.h>
+#include <fcntl.h>
+#include <cstdlib>
+#include <cstring>
+#include <sys/wait.h>
 
 Responder::Responder() {};
 Responder::~Responder() {};
+
+/**
+ * handleRequest()
+ * The main entry point for generating a response from a parsed request and a server config.
+ */
 
 HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &server)
 {
 	HttpResponse resp;
 
+	// 1) Find matching location
 	std::string path = parser.getPath();
 	const LocationConfig *loc = findLocation(server, path);
 
+	// 2) Check if method is allowed
 	HttpMethod method = parser.getMethod();
 	std::string allowHeader;
 	if (!isMethodAllowed(method, server, loc, allowHeader))
 		return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
 
+	// 3) Check if there's a redirect in the location
 	if (loc && !loc->redirect.empty())
 	{
 		std::istringstream iss(loc->redirect);
