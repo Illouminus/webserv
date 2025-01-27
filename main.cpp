@@ -26,3 +26,5 @@ int main(int argc, char *argv[])
 	}
 	return EXIT_SUCCESS;
 }
+
+/// opt/homebrew/bin/php-cgi MAC OS    cgi_pass /usr/bin/php-cgi; Linux

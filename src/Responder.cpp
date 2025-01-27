@@ -451,20 +451,50 @@ HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig 
  *
  * Returns: HttpResponse with the CGI output, or an error (500, etc.)
  */
+/**
+ * handleCgiMulti()
+ * A more production-like CGI handling method that:
+ *  - Figures out which interpreter to use based on file extension (.php, .sh, etc.)
+ *  - Sets multiple environment variables: REQUEST_METHOD, CONTENT_LENGTH, CONTENT_TYPE, QUERY_STRING, SCRIPT_FILENAME, etc.
+ *  - Reads from child stdout, returns as HttpResponse.
+ */
 HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &parser,
 											 const LocationConfig *loc,
 											 const std::string &reqPath)
 {
 	HttpResponse resp;
 
-	// 1) Build the full script path (physical path)
-	//    E.g. "/var/www/cgi-bin/script.py", using your buildFilePath(...) if needed.
+	// 1) Build the script path on disk: e.g. "/var/www/site1/cgi-bin/test.php"
 	std::string scriptPath = buildFilePath(server, loc, reqPath);
 
-	// 2) Construct environment variables
+	// 2) Determine extension => pick interpreter
+	std::string cgiInterpreter;
+	{
+		// Extract extension from scriptPath
+		size_t dotPos = scriptPath.rfind('.');
+		if (dotPos == std::string::npos)
+		{
+			// No extension => error or default?
+			return makeErrorResponse(403, "Forbidden", server, "No CGI extension found\n");
+		}
+		std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
+
+		// Decide interpreter
+		if (ext == ".php")
+			cgiInterpreter = "/opt/homebrew/bin/php-cgi"; // or loc->cgi_pass if you want /opt/homebrew/bin/php-cgi  /usr/bin/php-cgi
+		else if (ext == ".sh")
+			cgiInterpreter = "/bin/sh";
+		else
+		{
+			// If you only allow .php & .sh
+			return makeErrorResponse(403, "Forbidden", server, "Unsupported CGI extension\n");
+		}
+	}
+
+	// 3) Construct environment variables
 	std::vector<std::string> envVec;
 
-	// REQUEST_METHOD
+	// (a) REQUEST_METHOD
 	{
 		std::string methodStr;
 		switch (parser.getMethod())
@@ -483,49 +513,76 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 			break;
 		default:
 			methodStr = "UNKNOWN";
+			break;
 		}
 		envVec.push_back("REQUEST_METHOD=" + methodStr);
 	}
 
-	// CONTENT_LENGTH if POST, or maybe parser.getHeaders()["content-length"] if present
-	if (parser.getMethod() == HTTP_METHOD_POST)
+	// (b) CONTENT_LENGTH (if POST or PUT, etc.)
+	if (parser.getMethod() == HTTP_METHOD_POST || parser.getMethod() == HTTP_METHOD_PUT)
 	{
 		std::ostringstream oss;
-		oss << parser.getBody().size(); // chunked or not, final size is parser.getBody().size()
+		oss << parser.getBody().size();
 		envVec.push_back("CONTENT_LENGTH=" + oss.str());
+
+		// Also set CONTENT_TYPE if available
+		// e.g. auto it = parser.getHeaders().find("content-type");
+		// if (it != parser.getHeaders().end()) {
+		//     envVec.push_back("CONTENT_TYPE=" + it->second);
+		// }
+		// For simplicity, assume text/plain
+		envVec.push_back("CONTENT_TYPE=text/plain");
 	}
 
-	// QUERY_STRING if GET (split from path ?)
-	// E.g. if reqPath = "/cgi-bin/script.py?x=1&y=2", parse query.
-	// In your parser, you might store these.
-	// For simplicity, let's do nothing or parse if you have them.
+	// (c) SERVER_PROTOCOL
+	envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion()); // e.g. "HTTP/1.1"
 
-	// SCRIPT_NAME (the path to the CGI script in URL), PATH_INFO, etc. (optional)
-	// SERVER_PROTOCOL, e.g. "HTTP/1.1"
-	envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion());
+	// (d) SCRIPT_FILENAME (some CGI expect it)
+	envVec.push_back("SCRIPT_FILENAME=" + scriptPath);
 
-	// Convert envVec to null-terminated array of char*
+	// (e) If GET => parse query string from path
+	// Suppose your HttpParser can store something like parser.getQuery()?
+	// If not, you might parse it from parser.getPath() if has '?' part.
+	// For example:
+	std::string pathOnly = parser.getPath();
+	std::string queryPart;
+	size_t qPos = pathOnly.find('?');
+	if (qPos != std::string::npos)
+	{
+		queryPart = pathOnly.substr(qPos + 1);
+		// Remove that from path if needed, but okay.
+	}
+	// Add "QUERY_STRING=..."
+	envVec.push_back("QUERY_STRING=" + queryPart);
+
+	// Additional environment (SERVER_NAME, SERVER_SOFTWARE, etc.) can be added
+	// envVec.push_back("SERVER_NAME=localhost");
+	// envVec.push_back("SERVER_SOFTWARE=webserv/1.0");
+	// etc.
+
+	// Convert envVec to char*[] for execve
 	std::vector<char *> envp;
 	for (size_t i = 0; i < envVec.size(); i++)
-	{
 		envp.push_back(const_cast<char *>(envVec[i].c_str()));
-	}
 	envp.push_back(NULL);
 
-	// 3) Build args for execve: [cgi_pass, scriptPath, NULL]
-	//    e.g. ["/usr/bin/python", "/var/www/cgi-bin/script.py", NULL]
+	// 4) Build args: e.g. ["/usr/bin/php-cgi", "/var/www/site1/cgi-bin/test.php", NULL]
 	std::vector<char *> args;
-	args.push_back(const_cast<char *>(loc->cgi_pass.c_str())); // e.g. /usr/bin/python
-	args.push_back(const_cast<char *>(scriptPath.c_str()));	  // actual script
+	args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
+	args.push_back(const_cast<char *>(scriptPath.c_str()));
+	envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
+	envVec.push_back("REDIRECT_STATUS=200");
 	args.push_back(NULL);
 
-	// 4) Prepare pipes for child's stdout -> parent reading
+	// 5) Prepare pipes
 	int pipeOut[2];
 	if (pipe(pipeOut) == -1)
-		return makeErrorResponse(500, "Internal Server Error", server, "Failed to create pipeOut\n");
+	{
+		return makeErrorResponse(500, "Internal Server Error",
+										 server, "Failed to create pipeOut\n");
+	}
 
-	// Optionally create pipe for stdin if there's a request body
-	bool hasBody = (!parser.getBody().empty());
+	bool hasBody = !parser.getBody().empty();
 	int pipeIn[2];
 	if (hasBody)
 	{
@@ -537,7 +594,7 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 		}
 	}
 
-	// 5) Fork
+	// 6) Fork
 	pid_t pid = fork();
 	if (pid < 0)
 	{
@@ -553,14 +610,11 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 	}
 	else if (pid == 0)
 	{
-		// --- CHILD PROCESS ---
-
-		// Redirect stdout to pipeOut[1]
+		// Child
 		dup2(pipeOut[1], STDOUT_FILENO);
-		close(pipeOut[0]); // not needed in child
+		close(pipeOut[0]);
 		close(pipeOut[1]);
 
-		// If we have body, redirect stdin from pipeIn[0]
 		if (hasBody)
 		{
 			dup2(pipeIn[0], STDIN_FILENO);
@@ -568,32 +622,23 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 			close(pipeIn[0]);
 		}
 
-		// execve: cgi_pass + script
-		// envp for environment
+		// Execute
 		execve(args[0], &args[0], &envp[0]);
-
-		// If execve fails:
-		_exit(1);
+		_exit(1); // if execve fails
 	}
 	else
 	{
-		// --- PARENT PROCESS ---
-		// We do not write to pipeOut[1]
+		// Parent
 		close(pipeOut[1]);
 
-		// If we have body, let's write parser.getBody() to child's stdin
 		if (hasBody)
 		{
 			close(pipeIn[0]);
-			// Write the entire request body
-			ssize_t written = write(pipeIn[1],
-											parser.getBody().c_str(),
-											parser.getBody().size());
-			(void)written; // ignore or check for errors
+			write(pipeIn[1], parser.getBody().c_str(), parser.getBody().size());
 			close(pipeIn[1]);
 		}
 
-		// Now read child's stdout from pipeOut[0]
+		// Read from child
 		std::ostringstream cgiOutput;
 		char buf[1024];
 		ssize_t rd;
@@ -603,23 +648,18 @@ HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &
 		}
 		close(pipeOut[0]);
 
-		// Wait for child to finish
 		int status;
 		waitpid(pid, &status, 0);
 
-		// Build the HttpResponse
-		std::string outStr = cgiOutput.str();
-
-		// Minimal approach: treat all CGI output as body
-		// Or parse "Content-type: ..." etc.
+		// Minimal approach: treat entire cgiOutput as body
+		HttpResponse resp;
 		resp.setStatus(200, "OK");
-		resp.setBody(outStr);
 		resp.setHeader("Content-Type", "text/html");
-		// In a more advanced solution, we'd parse CGI headers from outStr.
+		resp.setBody(cgiOutput.str());
 
 		return resp;
 	}
 
-	// If we somehow get here, return an error
+	// Should never happen
 	return makeErrorResponse(500, "Internal Server Error", server, "Unknown CGI error\n");
 }
