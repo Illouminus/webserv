@@ -22,9 +22,9 @@ public:
 	// Возвращаем готовый HttpResponse
 	HttpResponse handleRequest(const HttpParser &parser, ServerConfig &server);
 
-		HttpResponse makeErrorResponse(int code, const std::string &reason, 
-								   const ServerConfig &server,
-                                   const std::string &defaultMessage);
+	HttpResponse makeErrorResponse(int code, const std::string &reason,
+											 const ServerConfig &server,
+											 const std::string &defaultMessage);
 
 private:
 	// Вспомогательная функция: находим нужную LocationConfig*
@@ -42,18 +42,16 @@ private:
 	// Попытка отдать статический файл (или вернуть false, если не получилось)
 	bool setBodyFromFile(HttpResponse &resp, const std::string &filePath);
 
-	// Обработка возвращаемой страницы ошибки (если есть настроена error_page)
-	void handleErrorPage(HttpResponse &resp, ServerConfig &server, int code);
-
-	HttpResponse handleGet(ServerConfig &server,
+	HttpResponse handleGet(ServerConfig &server, const HttpParser &parser,
 								  const LocationConfig *loc, const std::string &reqPath);
-	HttpResponse handlePost(const HttpParser &parser,
-									const LocationConfig *loc, const std::string &reqPath);
+	HttpResponse handlePost(const ServerConfig &server,
+									const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
 	HttpResponse handleDelete(ServerConfig &server,
 									  const LocationConfig *loc, const std::string &reqPath);
 
-
-
 	std::string extractFilename(const std::string &reqPath);
 
+	HttpResponse handleCgi(const ServerConfig &server, const HttpParser &parser,
+								  const LocationConfig *loc,
+								  const std::string &reqPath);
 };
