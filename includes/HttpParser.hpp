@@ -43,6 +43,7 @@ private:
 	// Result of parsing
 	HttpMethod _method;
 	std::string _path;
+	std::string _query;
 	std::string _version; // For example, "HTTP/1.1"
 	std::map<std::string, std::string> _headers;
 	std::string _body;
@@ -72,6 +73,7 @@ public:
 	HttpMethod getMethod() const;
 	std::string getPath() const;
 	std::string getVersion() const;
+	std::string getQuery() const;
 	std::map<std::string, std::string> getHeaders() const;
 	std::string getBody() const;
 	bool hasError() const;

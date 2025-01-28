@@ -6,6 +6,7 @@
 # 1) Прочитать нужные переменные окружения
 METHOD="$REQUEST_METHOD"
 LEN="$CONTENT_LENGTH"
+QUERY_STRING="$QUERY_STRING"
 
 # 2) Считать body, если есть
 BODY=""
@@ -27,6 +28,7 @@ cat <<EOF
 <body>
 <h1>Hello from Shell CGI!</h1>
 <p>REQUEST_METHOD = $METHOD</p>
+<p>QUERY_STRING = $QUERY_STRING</p>
 EOF
 
 if [ -n "$BODY" ]; then

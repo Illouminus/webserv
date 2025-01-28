@@ -83,6 +83,11 @@ std::string HttpParser::getVersion() const
 	return _version;
 }
 
+std::string HttpParser::getQuery() const
+{
+	return _query;
+}
+
 std::map<std::string, std::string> HttpParser::getHeaders() const
 {
 	return _headers;
@@ -158,35 +163,51 @@ void HttpParser::parseHeaders()
 
 void HttpParser::parseRequestLine(const std::string &line)
 {
-	// Example: "GET /index.html HTTP/1.1"
-	std::istringstream iss(line);
-	std::string methodStr, pathStr, versionStr;
-	if (!(iss >> methodStr >> pathStr >> versionStr)) 
-	{
-   		_status = PARSING_ERROR;
-		_errorCode = ERR_400;
-    	return;
-	}
-	if (methodStr == "GET")
-		_method = HTTP_METHOD_GET;
-	else if (methodStr == "POST")
-		_method = HTTP_METHOD_POST;
-	else if (methodStr == "PUT")
-		_method = HTTP_METHOD_PUT;
-	else if (methodStr == "DELETE")
-		_method = HTTP_METHOD_DELETE;
-	else
-		_method = HTTP_METHOD_UNKNOWN;
+    // Example: "GET /index.html?foo=bar HTTP/1.1"
+    std::istringstream iss(line);
 
-	_path = pathStr;
-	_version = versionStr; // "HTTP/1.1"
-	if (versionStr != "HTTP/1.1" && versionStr != "HTTP/1.0") 
-	{
-   		_status = PARSING_ERROR;
-		_errorCode = ERR_400;
-    	return;
+    std::string methodStr, rawPath, versionStr;
+    if (!(iss >> methodStr >> rawPath >> versionStr)) 
+    {
+        _status = PARSING_ERROR;
+        _errorCode = ERR_400;
+        return;
+    }
+
+    // 1) Determine the method
+    if (methodStr == "GET") _method = HTTP_METHOD_GET;
+    else if (methodStr == "POST") _method = HTTP_METHOD_POST;
+    else if (methodStr == "PUT")  _method = HTTP_METHOD_PUT;
+    else if (methodStr == "DELETE") _method = HTTP_METHOD_DELETE;
+    else _method = HTTP_METHOD_UNKNOWN;
+
+    // 2) Query string if present
+    // rawPath for example "/index.html?foo=bar"
+    size_t qPos = rawPath.find('?');
+    if (qPos != std::string::npos)
+    {
+        // All before ? — path
+        _path = rawPath.substr(0, qPos);
+        // All after ? — query
+        _query = rawPath.substr(qPos + 1);
+    }
+    else
+    {
+        // Don't have query string
+        _path = rawPath;
+        _query.clear();
+    }
+
+    // 3) Protocol version
+    _version = versionStr;
+    if (_version != "HTTP/1.1" && _version != "HTTP/1.0")
+    {
+        _status = PARSING_ERROR;
+        _errorCode = ERR_400;
+        return;
+    }
 }
-}
+
 
 bool HttpParser::isKeepAlive() const
 {

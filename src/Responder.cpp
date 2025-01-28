@@ -452,213 +452,211 @@ HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig 
  * Returns: HttpResponse with the CGI output, or an error (500, etc.)
  */
 
-HttpResponse Responder::handleCgi(const ServerConfig &server, const HttpParser &parser,
-											 const LocationConfig *loc,
-											 const std::string &reqPath)
+HttpResponse Responder::handleCgi(const ServerConfig &server, 
+                                  const HttpParser &parser,
+                                  const LocationConfig *loc,
+                                  const std::string &reqPath)
 {
-	HttpResponse resp;
+    HttpResponse resp;
 
-	// 1) Build the script path on disk: e.g. "/var/www/site1/cgi-bin/test.php"
-	std::string scriptPath = buildFilePath(server, loc, reqPath);
+    // 1) Build the script path on disk, e.g. "/var/www/site1/cgi-bin/test.php"
+    std::string scriptPath = buildFilePath(server, loc, reqPath);
+    
+    // 2) Detect interpreter
+    //    Option A: If loc->cgi_pass is not empty => use that
+    //    Option B: Or check extension
+    std::string cgiInterpreter;
+    
+    if (!loc->cgi_pass.empty())
+    {
+        // Use loc->cgi_pass (the user explicitly set an interpreter, e.g. /opt/homebrew/bin/php-cgi)
+        cgiInterpreter = loc->cgi_pass;
+    }
+    else
+    {
+        // Otherwise, auto-detect by file extension
+        size_t dotPos = scriptPath.rfind('.');
+        if (dotPos == std::string::npos)
+        {
+            return makeErrorResponse(403, "Forbidden", server,
+                                     "No CGI extension found\n");
+        }
+        std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
 
-	// 2) Determine extension => pick interpreter
-	std::string cgiInterpreter;
-	{
-		// Extract extension from scriptPath
-		size_t dotPos = scriptPath.rfind('.');
-		if (dotPos == std::string::npos)
-		{
-			// No extension => error or default?
-			return makeErrorResponse(403, "Forbidden", server, "No CGI extension found\n");
-		}
-		std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
+        if (ext == ".php")
+        {
+            cgiInterpreter = "/opt/homebrew/bin/php-cgi"; // or "/usr/bin/php-cgi"
+        }
+        else if (ext == ".sh")
+        {
+            cgiInterpreter = "/bin/sh";
+        }
+        else
+        {
+            return makeErrorResponse(403, "Forbidden", server,
+                                     "Unsupported CGI extension\n");
+        }
+    }
 
-		// Decide interpreter
-		if (ext == ".php")
-			cgiInterpreter = "/opt/homebrew/bin/php-cgi"; // or loc->cgi_pass if you want /opt/homebrew/bin/php-cgi  /usr/bin/php-cgi
-		else if (ext == ".sh")
-			cgiInterpreter = "/bin/sh";
-		else
-		{
-			// If you only allow .php & .sh
-			return makeErrorResponse(403, "Forbidden", server, "Unsupported CGI extension\n");
-		}
-	}
+    // 3) Build environment variables (envVec)
+    std::vector<std::string> envVec;
 
-	// 3) Construct environment variables
-	std::vector<std::string> envVec;
+    // (a) REQUEST_METHOD
+    {
+        std::string methodStr;
+        switch (parser.getMethod())
+        {
+            case HTTP_METHOD_GET:    methodStr = "GET";    break;
+            case HTTP_METHOD_POST:   methodStr = "POST";   break;
+            case HTTP_METHOD_DELETE: methodStr = "DELETE"; break;
+            case HTTP_METHOD_PUT:    methodStr = "PUT";    break;
+            default:                 methodStr = "UNKNOWN";
+        }
+        envVec.push_back("REQUEST_METHOD=" + methodStr);
+    }
 
-	// (a) REQUEST_METHOD
-	{
-		std::string methodStr;
-		switch (parser.getMethod())
-		{
-		case HTTP_METHOD_GET:
-			methodStr = "GET";
-			break;
-		case HTTP_METHOD_POST:
-			methodStr = "POST";
-			break;
-		case HTTP_METHOD_DELETE:
-			methodStr = "DELETE";
-			break;
-		case HTTP_METHOD_PUT:
-			methodStr = "PUT";
-			break;
-		default:
-			methodStr = "UNKNOWN";
-			break;
-		}
-		envVec.push_back("REQUEST_METHOD=" + methodStr);
-	}
+    // (b) CONTENT_LENGTH, CONTENT_TYPE (if POST/PUT)
+    if (parser.getMethod() == HTTP_METHOD_POST || parser.getMethod() == HTTP_METHOD_PUT)
+    {
+        // content-length
+        std::ostringstream oss;
+        oss << parser.getBody().size();
+        envVec.push_back("CONTENT_LENGTH=" + oss.str());
 
-	// (b) CONTENT_LENGTH (if POST or PUT, etc.)
-	if (parser.getMethod() == HTTP_METHOD_POST || parser.getMethod() == HTTP_METHOD_PUT)
-	{
-		std::ostringstream oss;
-		oss << parser.getBody().size();
-		envVec.push_back("CONTENT_LENGTH=" + oss.str());
+        // content-type (use parser.getHeaders() if you want the real one)
+        // For now, we hardcode to text/plain
+        envVec.push_back("CONTENT_TYPE=text/plain");
+    }
 
-		// Also set CONTENT_TYPE if available
-		// e.g. auto it = parser.getHeaders().find("content-type");
-		// if (it != parser.getHeaders().end()) {
-		//     envVec.push_back("CONTENT_TYPE=" + it->second);
-		// }
-		// For simplicity, assume text/plain
-		envVec.push_back("CONTENT_TYPE=text/plain");
-	}
+    // (c) SERVER_PROTOCOL
+    envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion()); // e.g. "HTTP/1.1"
 
-	// (c) SERVER_PROTOCOL
-	envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion()); // e.g. "HTTP/1.1"
+    // (d) SCRIPT_FILENAME (often needed by php-cgi)
+    envVec.push_back("SCRIPT_FILENAME=" + scriptPath);
 
-	// (d) SCRIPT_FILENAME (some CGI expect it)
-	envVec.push_back("SCRIPT_FILENAME=" + scriptPath);
+    // (e) QUERY_STRING — we assume parser has getQuery()
+    // if not, you can do your own parse of ? in path
+    envVec.push_back("QUERY_STRING=" + parser.getQuery());
 
-	// (e) If GET => parse query string from path
-	// Suppose your HttpParser can store something like parser.getQuery()?
-	// If not, you might parse it from parser.getPath() if has '?' part.
-	// For example:
-	std::string pathOnly = parser.getPath();
-	std::string queryPart;
-	size_t qPos = pathOnly.find('?');
-	if (qPos != std::string::npos)
-	{
-		queryPart = pathOnly.substr(qPos + 1);
-		// Remove that from path if needed, but okay.
-	}
-	// Add "QUERY_STRING=..."
-	envVec.push_back("QUERY_STRING=" + queryPart);
-	envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
-	envVec.push_back("REDIRECT_STATUS=200");
+    // (f) Some CGI variables that php-cgi typically requires
+    envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
+    envVec.push_back("REDIRECT_STATUS=200");
 
-	// Additional environment (SERVER_NAME, SERVER_SOFTWARE, etc.) can be added
-	// envVec.push_back("SERVER_NAME=localhost");
-	// envVec.push_back("SERVER_SOFTWARE=webserv/1.0");
-	// etc.
+    // Optionally: SERVER_NAME, SERVER_SOFTWARE, etc. could be added
+    // envVec.push_back("SERVER_NAME=localhost");
+    // envVec.push_back("SERVER_SOFTWARE=webserv/1.0");
 
-	// Convert envVec to char*[] for execve
-	std::vector<char *> envp;
-	for (size_t i = 0; i < envVec.size(); i++)
-		envp.push_back(const_cast<char *>(envVec[i].c_str()));
-	envp.push_back(NULL);
+    // 4) Convert envVec -> envp (null-terminated array of char*)
+    std::vector<char *> envp;
+    for (size_t i = 0; i < envVec.size(); i++)
+    {
+        envp.push_back(const_cast<char *>(envVec[i].c_str()));
+    }
+    envp.push_back(NULL);
 
-	// 4) Build args: e.g. ["/usr/bin/php-cgi", "/var/www/site1/cgi-bin/test.php", NULL]
-	std::vector<char *> args;
-	args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
-	args.push_back(const_cast<char *>(scriptPath.c_str()));
+    // 5) Build args array: [cgiInterpreter, scriptPath, NULL]
+    std::vector<char *> args;
+    args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
+    args.push_back(const_cast<char *>(scriptPath.c_str()));
+    args.push_back(NULL);
 
-	for (size_t i = 0; i < args.size(); i++)
-	{
-		std::cout << args[i] << std::endl;
-	}
-	args.push_back(NULL);
+    // 6) Create pipes
+    int pipeOut[2];
+    if (pipe(pipeOut) == -1)
+    {
+        return makeErrorResponse(500, "Internal Server Error", server,
+                                 "Failed to create pipeOut\n");
+    }
 
-	// 5) Prepare pipes
-	int pipeOut[2];
-	if (pipe(pipeOut) == -1)
-	{
-		return makeErrorResponse(500, "Internal Server Error",
-										 server, "Failed to create pipeOut\n");
-	}
+    bool hasBody = !parser.getBody().empty();
+    int pipeIn[2];
+    if (hasBody)
+    {
+        if (pipe(pipeIn) == -1)
+        {
+            close(pipeOut[0]);
+            close(pipeOut[1]);
+            return makeErrorResponse(500, "Internal Server Error", server,
+                                     "Failed to create pipeIn\n");
+        }
+    }
 
-	bool hasBody = !parser.getBody().empty();
-	int pipeIn[2];
-	if (hasBody)
-	{
-		if (pipe(pipeIn) == -1)
-		{
-			close(pipeOut[0]);
-			close(pipeOut[1]);
-			return makeErrorResponse(500, "Internal Server Error", server, "Failed to create pipeIn\n");
-		}
-	}
+    // 7) Fork
+    pid_t pid = fork();
+    if (pid < 0)
+    {
+        // fork failed
+        close(pipeOut[0]);
+        close(pipeOut[1]);
+        if (hasBody)
+        {
+            close(pipeIn[0]);
+            close(pipeIn[1]);
+        }
+        return makeErrorResponse(500, "Internal Server Error", server,
+                                 "Fork failed\n");
+    }
+    else if (pid == 0)
+    {
+        // -- Child process --
 
-	// 6) Fork
-	pid_t pid = fork();
-	if (pid < 0)
-	{
-		// Fork failed
-		close(pipeOut[0]);
-		close(pipeOut[1]);
-		if (hasBody)
-		{
-			close(pipeIn[0]);
-			close(pipeIn[1]);
-		}
-		return makeErrorResponse(500, "Internal Server Error", server, "Fork failed\n");
-	}
-	else if (pid == 0)
-	{
-		// Child
-		dup2(pipeOut[1], STDOUT_FILENO);
-		close(pipeOut[0]);
-		close(pipeOut[1]);
+        // Redirect STDOUT to pipeOut[1]
+        dup2(pipeOut[1], STDOUT_FILENO);
+        close(pipeOut[0]);
+        close(pipeOut[1]);
 
-		if (hasBody)
-		{
-			dup2(pipeIn[0], STDIN_FILENO);
-			close(pipeIn[1]);
-			close(pipeIn[0]);
-		}
+        // If we have request body, tie pipeIn[0] -> STDIN
+        if (hasBody)
+        {
+            dup2(pipeIn[0], STDIN_FILENO);
+            close(pipeIn[1]);
+            close(pipeIn[0]);
+        }
 
-		// Execute
-		execve(args[0], &args[0], &envp[0]);
-		_exit(1); // if execve fails
-	}
-	else
-	{
-		// Parent
-		close(pipeOut[1]);
+        // execve
+        execve(args[0], &args[0], &envp[0]);
+        // If execve fails, exit child
+        _exit(1);
+    }
+    else
+    {
+        // -- Parent process --
 
-		if (hasBody)
-		{
-			close(pipeIn[0]);
-			write(pipeIn[1], parser.getBody().c_str(), parser.getBody().size());
-			close(pipeIn[1]);
-		}
+        // We don't write to pipeOut[1]
+        close(pipeOut[1]);
 
-		// Read from child
-		std::ostringstream cgiOutput;
-		char buf[1024];
-		ssize_t rd;
-		while ((rd = read(pipeOut[0], buf, sizeof(buf))) > 0)
-		{
-			cgiOutput.write(buf, rd);
-		}
-		close(pipeOut[0]);
+        if (hasBody)
+        {
+            // Write the request body to child's stdin
+            close(pipeIn[0]);
+            write(pipeIn[1], parser.getBody().c_str(), parser.getBody().size());
+            close(pipeIn[1]);
+        }
 
-		int status;
-		waitpid(pid, &status, 0);
+        // Read child's stdout
+        std::ostringstream cgiOutput;
+        char buf[1024];
+        ssize_t rd;
+        while ((rd = read(pipeOut[0], buf, sizeof(buf))) > 0)
+        {
+            cgiOutput.write(buf, rd);
+        }
+        close(pipeOut[0]);
 
-		// Minimal approach: treat entire cgiOutput as body
-		HttpResponse resp;
-		resp.setStatus(200, "OK");
-		resp.setHeader("Content-Type", "text/html");
-		resp.setBody(cgiOutput.str());
+        // Wait for child
+        int status;
+        waitpid(pid, &status, 0);
 
-		return resp;
-	}
+        // Build response
+        HttpResponse resp;
+        resp.setStatus(200, "OK");
+        resp.setHeader("Content-Type", "text/html");
+        resp.setBody(cgiOutput.str());
 
-	// Should never happen
-	return makeErrorResponse(500, "Internal Server Error", server, "Unknown CGI error\n");
+        return resp;
+    }
+
+    // Should not reach here
+    return makeErrorResponse(500, "Internal Server Error", server,
+                             "Unknown CGI error\n");
 }
