@@ -86,7 +86,10 @@ void WebServ::mainLoop()
 	while (true)
 	{
 		fd_set readfds;
+		fd_set writefds;
+		
 		FD_ZERO(&readfds);
+		FD_ZERO(&writefds);
 
 		// Add listening sockets to read set
 		for (size_t i = 0; i < _listenSockets.size(); i++)
