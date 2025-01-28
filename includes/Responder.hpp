@@ -27,6 +27,8 @@ public:
 											 const std::string &defaultMessage);
 
 private:
+	
+	static std::map<std::string, std::string> g_sessions;
 	// Вспомогательная функция: находим нужную LocationConfig*
 	const LocationConfig *findLocation(const ServerConfig &server, const std::string &path);
 

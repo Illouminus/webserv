@@ -60,6 +60,20 @@
 		"list": "cpp",
 		"deque": "cpp",
 		"regex": "cpp",
-		"*.tcc": "cpp"
+		"*.tcc": "cpp",
+		"bit": "cpp",
+		"compare": "cpp",
+		"concepts": "cpp",
+		"functional": "cpp",
+		"iterator": "cpp",
+		"memory": "cpp",
+		"memory_resource": "cpp",
+		"numeric": "cpp",
+		"random": "cpp",
+		"type_traits": "cpp",
+		"utility": "cpp",
+		"numbers": "cpp",
+		"ranges": "cpp",
+		"span": "cpp"
 	}
 }

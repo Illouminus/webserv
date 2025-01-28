@@ -1,5 +1,6 @@
 #include "Responder.hpp"
 #include "AutoIndex.cpp"
+#include "Outils.cpp"
 #include <sstream>
 #include <fstream>
 #include <algorithm>
@@ -12,6 +13,7 @@
 
 Responder::Responder() {};
 Responder::~Responder() {};
+std::map<std::string, std::string> Responder::g_sessions;
 
 /**
  * handleRequest()
@@ -20,44 +22,85 @@ Responder::~Responder() {};
 
 HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &server)
 {
-	HttpResponse resp;
+    HttpResponse resp;
+	bool needSetCookie = false;
+	std::string cookieStr;
+	std::string newSid;
+	
+    // 0) (Optional) parse cookie
+    std::map<std::string, std::string> cookies;
+    {
+        // We look for the Cookie header
+        std::map<std::string, std::string> headers = parser.getHeaders(); 
+        // 'cookie' is lowercased in parseHeaderLine
+        if (headers.find("cookie") != headers.end()) {
+            cookieStr = headers["cookie"];
+        }
+        // parse
+        cookies = parseCookieString(cookieStr);
+    }
 
-	// 1) Find matching location
-	std::string path = parser.getPath();
-	const LocationConfig *loc = findLocation(server, path);
+    // 0.1) Check if we have session_id
+    if (cookies.find("session_id") == cookies.end())
+    {
+        // not found => generate
+		needSetCookie = true;
+        newSid = generateRandomSessionID();
+        // store in global map 
+        this->g_sessions[newSid] = "Some user data or empty string";
+        // (optional) we can do a debug print
+        std::cout << "New session_id created: " << newSid << std::endl;
+    }
+    else
+    {
+        // We do have session_id
+        std::string sid = cookies["session_id"];
+        std::cout << "Got session_id = " << sid << std::endl;
+        // if you want, check g_sessions[sid]
+    }
 
-	// 2) Check if method is allowed
-	HttpMethod method = parser.getMethod();
-	std::string allowHeader;
-	if (!isMethodAllowed(method, server, loc, allowHeader))
-		return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
+    // 1) Find matching location
+    std::string path = parser.getPath();
+    const LocationConfig *loc = findLocation(server, path);
 
-	// 3) Check if there's a redirect in the location
-	if (loc && !loc->redirect.empty())
-	{
-		// e.g. "301 /newpath"
-		std::istringstream iss(loc->redirect);
-		int code;
-		std::string newPath;
-		iss >> code >> newPath;
+    // 2) Check if method is allowed
+    HttpMethod method = parser.getMethod();
+    std::string allowHeader;
+    if (!isMethodAllowed(method, server, loc, allowHeader))
+        return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
 
-		resp.setStatus(code, "Redirect");
-		resp.setHeader("Location", newPath);
-		resp.setHeader("Content-Length", "0");
-		return resp;
-	}
-	// 4) Dispatch by method
-	if (method == HTTP_METHOD_POST)
-		return handlePost(server, parser, loc, path);
-	else if (method == HTTP_METHOD_DELETE)
-		return handleDelete(server, loc, path);
-	else if (method == HTTP_METHOD_GET)
-		return handleGet(server, parser, loc, path);
-	//  else if (method == HTTP_METHOD_PUT) etc.
+    // 3) Check if there's a redirect in the location
+    if (loc && !loc->redirect.empty())
+    {
+        // e.g. "301 /newpath"
+        std::istringstream iss(loc->redirect);
+        int code;
+        std::string newPath;
+        iss >> code >> newPath;
 
-	// For anything else, return 501
-	return makeErrorResponse(501, "Not Implemented", server, "Method not implemented");
+        resp.setStatus(code, "Redirect");
+        resp.setHeader("Location", newPath);
+        resp.setHeader("Content-Length", "0");
+        return resp;
+    }
+
+    // 4) Dispatch by method
+    if (method == HTTP_METHOD_POST)
+        resp = handlePost(server, parser, loc, path);
+    else if (method == HTTP_METHOD_DELETE)
+        resp = handleDelete(server, loc, path);
+    else if (method == HTTP_METHOD_GET)
+        resp = handleGet(server, parser, loc, path);
+	else
+ 		return makeErrorResponse(501, "Not Implemented", server, "Method not implemented");
+
+	if (needSetCookie)
+		resp.setHeader("Set-Cookie", "session_id=" + newSid + "; Path=/; HttpOnly");
+
+	return resp;
+   
 }
+
 
 /**
  * findLocation()
@@ -461,42 +504,36 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
 
     // 1) Build the script path on disk, e.g. "/var/www/site1/cgi-bin/test.php"
     std::string scriptPath = buildFilePath(server, loc, reqPath);
+
+	std::cout << "CGI script path: " << scriptPath << std::endl;
     
     // 2) Detect interpreter
     //    Option A: If loc->cgi_pass is not empty => use that
     //    Option B: Or check extension
     std::string cgiInterpreter;
-    
-    if (!loc->cgi_pass.empty())
+
+    size_t dotPos = scriptPath.rfind('.');
+    if (dotPos == std::string::npos)
     {
-        // Use loc->cgi_pass (the user explicitly set an interpreter, e.g. /opt/homebrew/bin/php-cgi)
-        cgiInterpreter = loc->cgi_pass;
+        return makeErrorResponse(403, "Forbidden", server,
+                                     "No CGI extension found\n");
+    }
+    std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
+
+    if (ext == ".php")
+    {
+        cgiInterpreter = "/usr/bin/php"; // or "/usr/bin/php-cgi" /opt/homebrew/bin/php-cg
+    }
+    else if (ext == ".sh")
+    {
+        cgiInterpreter = "/bin/sh";
     }
     else
     {
-        // Otherwise, auto-detect by file extension
-        size_t dotPos = scriptPath.rfind('.');
-        if (dotPos == std::string::npos)
-        {
-            return makeErrorResponse(403, "Forbidden", server,
-                                     "No CGI extension found\n");
-        }
-        std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
-
-        if (ext == ".php")
-        {
-            cgiInterpreter = "/opt/homebrew/bin/php-cgi"; // or "/usr/bin/php-cgi"
-        }
-        else if (ext == ".sh")
-        {
-            cgiInterpreter = "/bin/sh";
-        }
-        else
-        {
-            return makeErrorResponse(403, "Forbidden", server,
+        return makeErrorResponse(403, "Forbidden", server,
                                      "Unsupported CGI extension\n");
-        }
     }
+    
 
     // 3) Build environment variables (envVec)
     std::vector<std::string> envVec;
