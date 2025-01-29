@@ -61,7 +61,8 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
 
     // 1) Find matching location
     std::string path = parser.getPath();
-    const LocationConfig *loc = findLocation(server, path);
+
+	const LocationConfig *loc = findLocation(server, path);
 
     // 2) Check if method is allowed
     HttpMethod method = parser.getMethod();
@@ -396,6 +397,7 @@ HttpResponse Responder::handleGet(ServerConfig &server, const HttpParser &parser
 	}
 	else
 	{
+		std::cout << "File not found: " << realFilePath << std::endl;
 		return makeErrorResponse(404, "Not Found", server, "File Not Found\n");
 	}
 	return resp;

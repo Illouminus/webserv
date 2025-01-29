@@ -16,6 +16,10 @@
 #include <algorithm>
 #include "LocationConfig.hpp"
 #include "Responder.hpp"
+#include <ctime>
+#include <sys/epoll.h>
+
+#define TIMEOUT_SECONDS 30
 
 class WebServ
 {
@@ -35,10 +39,19 @@ private:
 	std::map<int, HttpParser> _parsers;
 	std::map<int, size_t> _listenSockettoServerIndex;
 	std::map<int, size_t> _clientToServerIndex;
+	std::map<int, std::string> _writeBuffers;
+	std::map<int, time_t> _lastActivity;
+	int _max_fd;
+	int _epoll_fd;
 
 	void initSockets();
 	void mainLoop();
 	int getMaxFd();
-	void acceptNewConnections(fd_set &readfds);
-	void handleClientSockets(fd_set &readfds, Responder &responder);
+	void updateMaxFd(int fd);
+	void acceptNewConnection(int listen_fd);
+	void handleClientRead(int fd, Responder &responder);
+	void handleClientWrite(int fd);
+	void closeConnection(int fd, std::list<int>::iterator &it);
+	void closeClient(int fd);
+	void checkTimeouts();
 };
