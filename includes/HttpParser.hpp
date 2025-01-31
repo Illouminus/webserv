@@ -1,5 +1,6 @@
 #pragma once
 #include <string>
+#include "ServerConfig.hpp"
 #include <vector>
 #include <map>
 #include <algorithm>
@@ -32,7 +33,55 @@ enum ParserStatus
 
 class HttpParser
 {
+
+public:
+	HttpParser();
+	HttpParser(const HttpParser &other);
+	HttpParser &operator=(const HttpParser &other);
+	~HttpParser();
+
+	// Add data to the buffer and try to parse it
+	void appendData(const std::string &data);
+
+	// Status checkers
+	bool isComplete() const;
+	bool hasError() const;
+	ParserError getErrorCode() const;
+
+	// Check if the headers are parsed
+	bool headersComplete() const;
+	bool serverSelected() const;
+	bool serverIsChosen() const;
+	void setServerSelected(bool val);
+	void setChosenServer(const ServerConfig &srv);
+	const ServerConfig *getChosenServer() const;
+
+	void setMaxBodySize(size_t sz);
+    size_t getMaxBodySize() const;
+	
+	// Getters
+	ParserStatus getStatus() const;
+	HttpMethod getMethod() const;
+	std::string getPath() const;
+	std::string getVersion() const;
+	std::string getQuery() const;
+
+	std::map<std::string, std::string> getHeaders() const;
+	std::string getBody() const;
+	std::string getHeader(const std::string &key) const;
+	
+	bool isKeepAlive() const;
+
 private:
+	void parseRequestLine(const std::string &line);
+	void parseHeaderLine(const std::string &line);
+	void parseHeaders();
+	void parseBody();
+	void parseChunkedBody();
+
+	// Chunked body parsing
+	long parseHexNumber(const std::string &hexStr);
+
 	// Buffer for incoming data
 	std::string _buffer;
 	ParserError _errorCode; 
@@ -43,47 +92,19 @@ private:
 	// Result of parsing
 	HttpMethod _method;
 	std::string _path;
+	std::string _host;
 	std::string _query;
-	std::string _version; // For example, "HTTP/1.1"
+	std::string _version; 
+
 	std::map<std::string, std::string> _headers;
+	const ServerConfig *_chosenServer;
 	std::string _body;
 
-	size_t _contentLength; // If mentioned in headers
-	bool _headerParsed;	  // Flag about first line of request parsed
+	size_t _contentLength;
+	
+	size_t _maxBodySize;
 
-	// size_t _contentSize;
-
-public:
-	HttpParser();
-	HttpParser(const HttpParser &other);
-	HttpParser &operator=(const HttpParser &other);
-	~HttpParser();
-
-	// Add data to the buffer and try to parse it
-	void appendData(const std::string &data, size_t maxBodySize);
-
-	// Check if the parsing is complete 
-	bool isComplete() const;
-
-	// Check if the connection should be kept alive
-	bool isKeepAlive() const;
-
-	// Getters
-	ParserStatus getStatus() const;
-	HttpMethod getMethod() const;
-	std::string getPath() const;
-	std::string getVersion() const;
-	std::string getQuery() const;
-	std::map<std::string, std::string> getHeaders() const;
-	std::string getBody() const;
-	bool hasError() const;
-	ParserError getErrorCode() const;
-
-private:
-	void parseRequestLine(const std::string &line);
-	void parseHeaderLine(const std::string &line);
-	void parseHeaders();
-	void parseBody();
-	void parseChunkedBody(size_t maxBodySize);
-	long parseHexNumber(const std::string &hexStr);
+	bool   _headerParsed;   
+    bool   _headersDone;    
+    bool   _serverSelected; 
 };

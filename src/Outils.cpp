@@ -8,7 +8,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-static std::map<std::string, std::string> parseCookieString(const std::string &cookieStr)
+std::map<std::string, std::string> parseCookieString(const std::string &cookieStr)
 {
     std::map<std::string, std::string> result;
     if (cookieStr.empty())
@@ -58,7 +58,7 @@ static std::map<std::string, std::string> parseCookieString(const std::string &c
 
 
 
-static std::string generateRandomSessionID()
+std::string generateRandomSessionID()
 {
     // Very trivial random
     // You can do something better with <random> or time
@@ -72,3 +72,4 @@ static std::string generateRandomSessionID()
     buf[8] = '\0';
     return std::string(buf);
 }
+

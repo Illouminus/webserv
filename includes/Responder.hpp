@@ -20,7 +20,7 @@ public:
 
 	// Главная точка входа: на вход - уже распарсенный запрос и ссылка на ServerConfig
 	// Возвращаем готовый HttpResponse
-	HttpResponse handleRequest(const HttpParser &parser, ServerConfig &server);
+	HttpResponse handleRequest(const HttpParser &parser, const ServerConfig &server);
 
 	HttpResponse makeErrorResponse(int code, const std::string &reason,
 											 const ServerConfig &server,
@@ -44,11 +44,11 @@ private:
 	// Попытка отдать статический файл (или вернуть false, если не получилось)
 	bool setBodyFromFile(HttpResponse &resp, const std::string &filePath);
 
-	HttpResponse handleGet(ServerConfig &server, const HttpParser &parser,
+	HttpResponse handleGet(const ServerConfig &server, const HttpParser &parser,
 								  const LocationConfig *loc, const std::string &reqPath);
 	HttpResponse handlePost(const ServerConfig &server,
 									const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
-	HttpResponse handleDelete(ServerConfig &server,
+	HttpResponse handleDelete(const ServerConfig &server,
 									  const LocationConfig *loc, const std::string &reqPath);
 
 	std::string extractFilename(const std::string &reqPath);

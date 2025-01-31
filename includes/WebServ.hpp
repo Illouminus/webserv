@@ -35,23 +35,22 @@ public:
 private:
 	std::vector<ServerConfig> _servers;
 	std::vector<int> _listenSockets;
-	std::list<int> _clientSockets;
 	std::map<int, HttpParser> _parsers;
 	std::map<int, size_t> _listenSockettoServerIndex;
 	std::map<int, size_t> _clientToServerIndex;
 	std::map<int, std::string> _writeBuffers;
 	std::map<int, time_t> _lastActivity;
-	int _max_fd;
+	std::map< std::pair<std::string,int>, std::vector<ServerConfig> > serverGroups;
+	std::map<int, std::vector<ServerConfig> > _serversForSocket;
+	std::map<int, const std::vector<ServerConfig>*> _clientToServers;
 	int _epoll_fd;
 
 	void initSockets();
 	void mainLoop();
-	int getMaxFd();
-	void updateMaxFd(int fd);
 	void acceptNewConnection(int listen_fd);
 	void handleClientRead(int fd, Responder &responder);
 	void handleClientWrite(int fd);
-	void closeConnection(int fd, std::list<int>::iterator &it);
 	void closeClient(int fd);
 	void checkTimeouts();
+	const ServerConfig &chooseServer(const std::vector<ServerConfig> &serversVec, const std::string &hostName);
 };

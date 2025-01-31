@@ -6,10 +6,15 @@
 #include <iostream>
 
 HttpParser::HttpParser()
-	 : _status(PARSING_HEADERS),
-		_method(HTTP_METHOD_UNKNOWN),
-		_contentLength(0),
-		_headerParsed(false)
+ : _errorCode(NO_ERROR),
+    _status(PARSING_HEADERS),
+   _method(HTTP_METHOD_UNKNOWN),
+   _chosenServer(NULL),
+   _contentLength(0),
+   _maxBodySize(0),
+   _headerParsed(false),
+   _headersDone(false),
+   _serverSelected(false)
 {
 }
 
@@ -37,16 +42,84 @@ HttpParser &HttpParser::operator=(const HttpParser &other)
 	return *this;
 }
 
-void HttpParser::appendData(const std::string &data, size_t maxBodySize)
+bool HttpParser::isComplete() const {
+    return (_status == COMPLETE);
+}
+
+bool HttpParser::hasError() const {
+    return (_status == PARSING_ERROR);
+}
+
+ParserStatus HttpParser::getStatus() const {
+	return _status;
+}
+
+HttpMethod HttpParser::getMethod() const {
+	return _method;
+}
+
+std::string HttpParser::getPath() const {
+	return _path;
+}
+
+std::string HttpParser::getVersion() const {
+	return _version;
+}
+
+std::string HttpParser::getQuery() const {
+	return _query;
+}
+
+bool HttpParser::serverIsChosen() const {
+    return (_chosenServer != NULL);
+}
+
+std::map<std::string, std::string> HttpParser::getHeaders() const {
+	return _headers;
+}
+
+std::string HttpParser::getBody() const {
+	return _body;
+}
+
+bool HttpParser::headersComplete() const {
+    return _headersDone;
+}
+
+bool HttpParser::serverSelected() const {
+    return _serverSelected;
+}
+void HttpParser::setServerSelected(bool val) {
+    _serverSelected = val;
+}
+
+void HttpParser::setMaxBodySize(size_t sz) {
+    _maxBodySize = sz;
+}
+size_t HttpParser::getMaxBodySize() const {
+    return _maxBodySize;
+}
+
+std::string HttpParser::getHeader(const std::string &key) const {
+    std::string lowerKey = key;
+    std::transform(lowerKey.begin(), lowerKey.end(), lowerKey.begin(), ::tolower);
+    std::map<std::string, std::string>::const_iterator it = _headers.find(lowerKey);
+    if (it != _headers.end())
+        return it->second;
+    return "";
+}
+
+void HttpParser::setChosenServer(const ServerConfig &srv) {
+    _chosenServer = &srv;
+}   
+
+const ServerConfig *HttpParser::getChosenServer() const {
+    return _chosenServer;
+}
+
+void HttpParser::appendData(const std::string &data)
 {
 	_buffer += data;
-
-	if (_buffer.size() > maxBodySize)
-	{
-		_status = PARSING_ERROR;
-		_errorCode = ERR_413;
-		return;
-	}
 
 	if (_status == PARSING_HEADERS)
 		parseHeaders();
@@ -55,110 +128,79 @@ void HttpParser::appendData(const std::string &data, size_t maxBodySize)
 		parseBody();
 
 	if(_status == PARSING_CHUNKED)
-		parseChunkedBody(maxBodySize);
+		parseChunkedBody();
 }
 
-bool HttpParser::isComplete() const
-{
-	return (_status == COMPLETE);
-}
 
-ParserStatus HttpParser::getStatus() const
-{
-	return _status;
-}
-
-HttpMethod HttpParser::getMethod() const
-{
-	return _method;
-}
-
-std::string HttpParser::getPath() const
-{
-	return _path;
-}
-
-std::string HttpParser::getVersion() const
-{
-	return _version;
-}
-
-std::string HttpParser::getQuery() const
-{
-	return _query;
-}
-
-std::map<std::string, std::string> HttpParser::getHeaders() const
-{
-	return _headers;
-}
-
-std::string HttpParser::getBody() const
-{
-	return _body;
-}
 
 void HttpParser::parseHeaders()
 {
-	// Find position of \r\n\r\n, which separates headers from body
-	while (true)
-	{
-		// Looking for the first occurence of \r\n
-		size_t pos = _buffer.find("\r\n");
-		if (pos == std::string::npos)
-		{
-			// _status = PARSING_ERROR;
-			// _errorCode = ERR_400;
-			return;
-		}
+    // Ищем в _buffer последовательность "\r\n\r\n"
+    // которая сигнализирует конец заголовков
+    size_t endHeadersPos = _buffer.find("\r\n\r\n");
+    if (endHeadersPos == std::string::npos) {
+        // ещё не пришли все заголовки
+        return;
+    }
 
-		// If \r\n is at the beginning of the buffer, then headers are parsed
-		if (pos == 0)
-		{
-			// Errase "\r\n" from the buffer
-			_buffer.erase(0, 2);
+    // Получаем часть (все строки заголовков)
+    std::string headersBlock = _buffer.substr(0, endHeadersPos);
+    // Убираем их из буфера
+    _buffer.erase(0, endHeadersPos + 4);
 
-			// Headers are parsed and we can check if there is a body
-			// If there is a body, then we need to parse it
-			// Else we can set the status to COMPLETE and return
+    // Теперь разобьём headersBlock по строкам "\r\n"
+    std::istringstream iss(headersBlock);
+    std::string line;
+    bool firstLine = true;
+    while (std::getline(iss, line)) {
+        // В getline, если не удалим "\r", могут оставаться символы
+        // Уберём \r в конце
+        if (!line.empty() && line[line.size()-1] == '\r')
+            line.erase(line.size()-1, 1);
 
-			if(_headers.count("transfer-encoding") && _headers["transfer-encoding"] == "chunked")
-			{
-				_status = PARSING_CHUNKED;
-				//parseChunkedBody();
-				return;
-			}
+        if (firstLine) {
+            parseRequestLine(line);
+            firstLine = false;
+            if (_status == PARSING_ERROR)
+                return; // Ошибка в request line
+        } else {
+            parseHeaderLine(line);
+            if (_status == PARSING_ERROR)
+                return; // Ошибка в заголовке
+        }
+    }
 
-			if (_headers.count("content-length"))
-			{
-				_contentLength = static_cast<size_t>(std::atoi(_headers["content-length"].c_str()));
-				_status = PARSING_BODY;
-				parseBody(); 
-			}
-			else
-			{
-				// Don't have content length (GET probably), so we can set the status to COMPLETE
-				_status = COMPLETE;
-			}
-			return;
-		}
+    _headersDone = true; // мы закончили читать заголовки
 
-		// Learn the header line on the left of \r\n
-		std::string line = _buffer.substr(0, pos);
-		_buffer.erase(0, pos + 2);
+    // Проверяем, есть ли Transfer-Encoding: chunked
+    std::string te;
+    if (_headers.find("transfer-encoding") != _headers.end())
+        te = _headers["transfer-encoding"];
+    // Приводим к lower
+    std::transform(te.begin(), te.end(), te.begin(), ::tolower);
 
-		// If the request line is not parsed yet, then parse it
-		if (!_headerParsed)
-		{
-			parseRequestLine(line);
-			_headerParsed = true;
-		}
-		else
-		{
-			// Otherwise this is a header line KEY : VALUE
-			parseHeaderLine(line);
-		}
-	}
+    if (te == "chunked") {
+        // Переходим в режим парсинга chunked
+        _status = PARSING_CHUNKED;
+        parseChunkedBody(); // вдруг сразу уже есть что-то в _buffer
+        return;
+    }
+
+    // Иначе, проверим Content-Length
+    if (_headers.find("content-length") != _headers.end()) {
+        long cl = std::atol(_headers["content-length"].c_str());
+        if (cl < 0) {
+            _status = PARSING_ERROR;
+            _errorCode = ERR_400;
+            return;
+        }
+        _contentLength = static_cast<size_t>(cl);
+        _status = PARSING_BODY;
+        parseBody(); // может, часть тела уже пришла
+    } else {
+        // Нет тела (GET или что-то ещё)
+        _status = COMPLETE;
+    }
 }
 
 void HttpParser::parseRequestLine(const std::string &line)
@@ -265,19 +307,18 @@ void HttpParser::parseHeaderLine(const std::string &line)
 
 void HttpParser::parseBody()
 {
-	if (_buffer.size() >= _contentLength)
-	{
-		_body = _buffer.substr(0, _contentLength);
-		_buffer.erase(0, _contentLength);
+    if (_buffer.size() >= _contentLength) {
+        _body = _buffer.substr(0, _contentLength);
+        _buffer.erase(0, _contentLength);
+        _status = COMPLETE;
+    }
 
-		_status = COMPLETE;
-	}
+    if (_maxBodySize > 0 && _body.size() > _maxBodySize) {
+        _status = PARSING_ERROR;
+        _errorCode = ERR_413;
+    }
 }
 
-bool HttpParser::hasError() const
-{
-	return (_status == PARSING_ERROR);
-}
 
 ParserError HttpParser::getErrorCode() const
 {
@@ -300,7 +341,7 @@ long HttpParser::parseHexNumber(const std::string &hexStr)
     return val;
 }
 
-void HttpParser::parseChunkedBody(size_t maxBodySize)
+void HttpParser::parseChunkedBody()
 {
 	
 	while(_status == PARSING_CHUNKED)
@@ -333,7 +374,6 @@ void HttpParser::parseChunkedBody(size_t maxBodySize)
 		if(chunkSize == 0)
 		{
 			_status = COMPLETE;
-			std::cout << _body << std::endl;
 			return;
 		}
 
@@ -371,12 +411,11 @@ void HttpParser::parseChunkedBody(size_t maxBodySize)
 
 		// 8) Check if the body size is not too big
 
-		if(_body.size() > maxBodySize)
-		{
-			_status = PARSING_ERROR;
-			_errorCode = ERR_413;
-			return;
-		}
+        if (_maxBodySize > 0 && _body.size() > _maxBodySize) {
+            _status = PARSING_ERROR;
+            _errorCode = ERR_413;
+            return;
+        }
 	}
 
 }

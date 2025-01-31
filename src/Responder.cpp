@@ -20,7 +20,7 @@ std::map<std::string, std::string> Responder::g_sessions;
  * The main entry point for generating a response from a parsed request and a server config.
  */
 
-HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &server)
+HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConfig &server)
 {
     HttpResponse resp;
 	bool needSetCookie = false;
@@ -55,7 +55,6 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, ServerConfig &se
     {
         // We do have session_id
         std::string sid = cookies["session_id"];
-        std::cout << "Got session_id = " << sid << std::endl;
         // if you want, check g_sessions[sid]
     }
 
@@ -332,7 +331,7 @@ HttpResponse Responder::makeErrorResponse(int code,
  *  - or if loc->cgi_pass => handleCgi(...)
  */
 
-HttpResponse Responder::handleGet(ServerConfig &server, const HttpParser &parser,
+HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &parser,
 											 const LocationConfig *loc,
 											 const std::string &reqPath)
 {
@@ -450,7 +449,7 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
 	return resp;
 }
 
-HttpResponse Responder::handleDelete(ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
+HttpResponse Responder::handleDelete(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
 {
 	HttpResponse resp;
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
@@ -507,8 +506,6 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
     // 1) Build the script path on disk, e.g. "/var/www/site1/cgi-bin/test.php"
     std::string scriptPath = buildFilePath(server, loc, reqPath);
 
-	std::cout << "CGI script path: " << scriptPath << std::endl;
-    
     // 2) Detect interpreter
     //    Option A: If loc->cgi_pass is not empty => use that
     //    Option B: Or check extension
