@@ -119,7 +119,11 @@ const ServerConfig *HttpParser::getChosenServer() const {
 
 void HttpParser::appendData(const std::string &data)
 {
-	_buffer += data;
+    if (_status == COMPLETE || _status == PARSING_ERROR)
+        return; 
+
+	
+    _buffer += data;
 
 	if (_status == PARSING_HEADERS)
 		parseHeaders();
@@ -140,19 +144,32 @@ void HttpParser::parseHeaders()
     size_t endHeadersPos = _buffer.find("\r\n\r\n");
     if (endHeadersPos == std::string::npos) {
         // ещё не пришли все заголовки
+        endHeadersPos = _buffer.find("\n\n");
+        if (endHeadersPos == std::string::npos) {
+        // ещё не пришли все заголовки
         return;
     }
+    }
+    
 
     // Получаем часть (все строки заголовков)
     std::string headersBlock = _buffer.substr(0, endHeadersPos);
     // Убираем их из буфера
-    _buffer.erase(0, endHeadersPos + 4);
-
+   if (_buffer.size() >= endHeadersPos + 4 && 
+        _buffer.compare(endHeadersPos, 4, "\r\n\r\n") == 0)
+    {
+        _buffer.erase(0, endHeadersPos + 4);
+    }
+    else
+    {
+        // Значит это "\n\n"
+        _buffer.erase(0, endHeadersPos + 2);
+    }
     // Теперь разобьём headersBlock по строкам "\r\n"
     std::istringstream iss(headersBlock);
     std::string line;
     bool firstLine = true;
-    while (std::getline(iss, line)) {
+    while (std::getline(iss, line, '\n')) {
         // В getline, если не удалим "\r", могут оставаться символы
         // Уберём \r в конце
         if (!line.empty() && line[line.size()-1] == '\r')
@@ -190,6 +207,7 @@ void HttpParser::parseHeaders()
     if (_headers.find("content-length") != _headers.end()) {
         long cl = std::atol(_headers["content-length"].c_str());
         if (cl < 0) {
+            std::cout << "ОШИБКА 1 " << std::endl;
             _status = PARSING_ERROR;
             _errorCode = ERR_400;
             return;
@@ -206,12 +224,15 @@ void HttpParser::parseHeaders()
 void HttpParser::parseRequestLine(const std::string &line)
 {
     // Example: "GET /index.html?foo=bar HTTP/1.1"
+
+    std::cout << "parseRequestLine: " << line << std::endl;
     std::istringstream iss(line);
 
     std::string methodStr, rawPath, versionStr;
     if (!(iss >> methodStr >> rawPath >> versionStr)) 
     {
         _status = PARSING_ERROR;
+        std::cout << "ОШИБКА 2 " << std::endl;
         _errorCode = ERR_400;
         return;
     }
@@ -242,9 +263,11 @@ void HttpParser::parseRequestLine(const std::string &line)
 
     // 3) Protocol version
     _version = versionStr;
+    std::cout << "Version: " << _version << std::endl;
     if (_version != "HTTP/1.1" && _version != "HTTP/1.0")
     {
         _status = PARSING_ERROR;
+        std::cout << "ОШИБКА 3 " << std::endl;
         _errorCode = ERR_400;
         return;
     }
@@ -281,11 +304,13 @@ bool HttpParser::isKeepAlive() const
 
 void HttpParser::parseHeaderLine(const std::string &line)
 {
+    std::cout << "parseHeaderLine: " << line << std::endl;
 	// For example: "Host: localhost:8080"
 	size_t pos = line.find(':');
 	if (pos == std::string::npos)
 		{
 			_status = PARSING_ERROR; // 400 Bad Request;
+            std::cout << "ОШИБКА 4 " << std::endl;
 			_errorCode = ERR_400;
 			return;
 		}
@@ -391,6 +416,7 @@ void HttpParser::parseChunkedBody()
         {
             // The chunk should end with \r\n
             _status = PARSING_ERROR;
+
             _errorCode = ERR_400;
             return;
         }

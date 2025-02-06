@@ -1,8 +1,12 @@
 body {
-	background-color: lightblue;
+	padding-top: 2rem;
  }
  
  h1 {
 	color: navy;
 	margin-left: 20px;
  }
+
+ .card {
+	margin-bottom: 1rem;
+  }

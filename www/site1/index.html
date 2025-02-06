@@ -1,17 +1,122 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-	<meta charset="UTF-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-	<meta http-equiv="X-UA-Compatible" content="ie=edge">
-	<link rel="stylesheet" href="./style.css">
-	<title>Document</title>
+  <meta charset="UTF-8" />
+  <title>WebServ Demo with Cat Cards</title>
+  <!-- Bootstrap CSS (CDN) -->
+  <link rel="stylesheet"
+        href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+  
+  <style>
+    body {
+      padding-top: 2rem;
+    }
+    .card {
+      margin-bottom: 1rem;
+    }
+  </style>
 </head>
-
 <body>
-	<h1 class="title">Hello World</h1>
-	<img src="https://www.google.com/images/branding/googlelogo/1x/googlelogo_color_272x92dp.png" alt="Google Logo">
-</body>
 
+<div class="container">
+  <h1 class="mb-4">WebServ Demo</h1>
+
+  <div class="row">
+    <!-- Card 1: GET Example -->
+    <div class="col-md-6">
+		<div class="card" style="width: 18rem;">
+			<img class="bd-placeholder-img card-img-top" width="100%" height="180" src="https://placekittens.com/g/293/180" role="img" />
+			<div class="card-body">
+			  <h5 class="card-title">GET Example</h5>
+			  <p class="card-text">
+				Send a GET request to <code>/hello</code>.
+			  </p>
+			  <a href="/hello" class="btn btn-primary">Send GET /hello</a>
+			</div>
+		  </div>
+    </div>
+
+    <!-- Card 2: POST Upload -->
+    <div class="col-md-6">
+      <div class="card" style="width: 18rem;">
+        <img src="https://placekittens.com/g/289/180" class="card-img-top" alt="Another cat">
+        <div class="card-body">
+          <h5 class="card-title">POST File Upload</h5>
+          <p class="card-text">
+            Use this form to upload a file via POST to <code>/uploads</code>.
+          </p>
+          <form action="/uploads" method="POST" enctype="multipart/form-data">
+            <div class="form-group">
+              <label for="fileInput">Choose a file:</label>
+              <input type="file" name="myfile" id="fileInput" class="form-control">
+            </div>
+            <button type="submit" class="btn btn-success">Upload</button>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div><!-- row -->
+
+  <div class="row">
+    <!-- Card 3: DELETE Example -->
+    <div class="col-md-6">
+      <div class="card" style="width: 18rem;">
+        <img src="https://placekittens.com/g/298/180" class="card-img-top" alt="Another cat">
+        <div class="card-body">
+          <h5 class="card-title">DELETE Example</h5>
+          <p class="card-text">
+            Send DELETE request to remove <code>/uploads/test.txt</code>.
+          </p>
+          <button class="btn btn-danger" id="btnDelete">DELETE /uploads/test.txt</button>
+          <div id="deleteResult" class="mt-2"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Card 4: CGI Example -->
+    <div class="col-md-6">
+      <div class="card" style="width: 18rem;">
+        <img src="https://placekittens.com/g/292/180" class="card-img-top" alt="Another cat">
+        <div class="card-body">
+          <h5 class="card-title">CGI Example</h5>
+          <p class="card-text">
+            If configured, click below to run PHP or Shell CGI scripts.
+          </p>
+          <a href="/cgi-bin/test.php" class="btn btn-info mb-1">Run CGI (PHP)</a>
+          <a href="/cgi-bin/test.sh" class="btn btn-secondary">Run CGI (Shell)</a>
+        </div>
+      </div>
+    </div>
+  </div><!-- row -->
+</div><!-- container -->
+
+<!-- Bootstrap + jQuery JS -->
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script 
+  src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js">
+</script>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+
+  var btnDelete = document.getElementById("btnDelete");
+  var deleteResult = document.getElementById("deleteResult");
+
+  btnDelete.addEventListener("click", function() {
+    fetch("/uploads/test.txt", {
+      method: "DELETE"
+    })
+    .then(response => response.text())
+    .then(text => {
+      deleteResult.innerHTML = "<pre>" + text + "</pre>";
+    })
+    .catch(err => {
+      deleteResult.innerHTML = "<pre>Error: " + err + "</pre>";
+    });
+  });
+
+});
+</script>
+
+</body>
 </html>

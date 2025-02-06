@@ -346,6 +346,8 @@ HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &
 	// Otherwise, proceed as static file or autoindex
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
 
+	std::cout << "GET REAL PATH: " << realFilePath << std::endl;
+
 	struct stat st;
 	if (stat(realFilePath.c_str(), &st) == 0)
 	{
@@ -363,7 +365,7 @@ HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &
 				if (stat(realFilePath.c_str(), &st2) != 0 || S_ISDIR(st2.st_mode))
 				{
 					// Index not found or is a dir
-					return makeErrorResponse(403, "Forbidden", server, "Directory listing is forbidden\n");
+					return makeErrorResponse(404, "Not found", server, "Directory listing is forbidden\n");
 				}
 			}
 			else

@@ -174,7 +174,6 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 		_lastActivity[fd] = time(NULL);
 
 		HttpParser &parser = _parsers[fd];
-        parser.appendData(std::string(buffer, bytes_read));
 
 		_parsers[fd].appendData(std::string(buffer, bytes_read));
 		
@@ -199,13 +198,25 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 			const ServerConfig *srv = parser.serverIsChosen() ? parser.getChosenServer()
             : NULL;
             HttpResponse resp;
-            if (parser.getErrorCode() == ERR_413) {
-                resp = responder.makeErrorResponse(413, "Payload Too Large", *srv,
-                                                   "Request Entity Too Large\n");
-            } else {
-                resp = responder.makeErrorResponse(400, "Bad Request", *srv,
-                                                   "Bad Request\n");
-            }
+		 if (parser.getErrorCode() == ERR_413) {
+			if (srv)
+				resp = responder.makeErrorResponse(413, "Payload Too Large", *srv,
+												"Request Entity Too Large\n");
+			else {
+				ServerConfig dummy; // пустой временный объект
+				resp = responder.makeErrorResponse(413, "Payload Too Large", dummy,
+												"Request Entity Too Large\n");
+			}
+		 } else {
+			if (srv)
+				resp = responder.makeErrorResponse(400, "Bad Request", *srv,
+												"Bad Request\n");
+			else {
+				ServerConfig dummy;
+				resp = responder.makeErrorResponse(400, "Bad Request", dummy,
+												"Bad Request\n");
+			}
+		 }
 
             _writeBuffers[fd] = resp.toString();
             struct epoll_event event;
@@ -227,8 +238,6 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 			event.data.fd = fd;
 			epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, fd, &event);
 		}
-
-
 	}
 
 	if (bytes_read == 0 || (bytes_read == -1 && errno != EAGAIN))
@@ -240,6 +249,7 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 void WebServ::handleClientWrite(int fd)
 {
 	std::string &buffer = _writeBuffers[fd];
+	std::cout << "Sending response: " << buffer << std::endl;
 	ssize_t sent = send(fd, buffer.c_str(), buffer.size(), MSG_NOSIGNAL);
 
 	if (sent > 0)
@@ -251,16 +261,17 @@ void WebServ::handleClientWrite(int fd)
 	if (buffer.empty())
 	{
 		// Возвращаем обратно на чтение
-		_parsers[fd] = HttpParser();
-		struct epoll_event event;
-		event.events = EPOLLIN | EPOLLET;
-		event.data.fd = fd;
-		epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, fd, &event);
+		// _parsers[fd] = HttpParser();
+		// struct epoll_event event;
+		// event.events = EPOLLIN | EPOLLET;
+		// event.data.fd = fd;
+		// epoll_ctl(_epoll_fd, EPOLL_CTL_MOD, fd, &event);
 
-		if (!_parsers[fd].isKeepAlive())
-		{
-			closeClient(fd);
-		}
+		// if (!_parsers[fd].isKeepAlive())
+		// {
+		// 	closeClient(fd);
+		// }
+		closeClient(fd);
 	}
 	else if (sent == -1 && errno != EAGAIN)
 	{
