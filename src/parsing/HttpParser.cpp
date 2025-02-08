@@ -225,7 +225,6 @@ void HttpParser::parseRequestLine(const std::string &line)
 {
     // Example: "GET /index.html?foo=bar HTTP/1.1"
 
-    std::cout << "parseRequestLine: " << line << std::endl;
     std::istringstream iss(line);
 
     std::string methodStr, rawPath, versionStr;
@@ -304,7 +303,6 @@ bool HttpParser::isKeepAlive() const
 
 void HttpParser::parseHeaderLine(const std::string &line)
 {
-    std::cout << "parseHeaderLine: " << line << std::endl;
 	// For example: "Host: localhost:8080"
 	size_t pos = line.find(':');
 	if (pos == std::string::npos)

@@ -73,3 +73,11 @@ std::string generateRandomSessionID()
     return std::string(buf);
 }
 
+
+std::string extractExtention(std::string path)
+{
+    size_t pos = path.rfind('.');
+    if (pos == std::string::npos)
+        return "";
+    return path.substr(pos);
+}

@@ -56,4 +56,6 @@ private:
 	HttpResponse handleCgi(const ServerConfig &server, const HttpParser &parser,
 								  const LocationConfig *loc,
 								  const std::string &reqPath);
+
+	HttpResponse processCgiOutput(int pipeFd, pid_t childPid);
 };

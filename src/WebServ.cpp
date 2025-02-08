@@ -249,7 +249,6 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 void WebServ::handleClientWrite(int fd)
 {
 	std::string &buffer = _writeBuffers[fd];
-	std::cout << "Sending response: " << buffer << std::endl;
 	ssize_t sent = send(fd, buffer.c_str(), buffer.size(), MSG_NOSIGNAL);
 
 	if (sent > 0)

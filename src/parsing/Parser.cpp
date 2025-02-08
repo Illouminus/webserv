@@ -130,6 +130,7 @@ void Parser::parseServerBlock(ServerConfig &srv)
 {
 	while (!isEnd())
 	{
+		
 		std::string t = peekToken();
 		if (t == "}")
 		{
@@ -151,13 +152,21 @@ void Parser::parseServerBlock(ServerConfig &srv)
 
 void Parser::parseLocationBlock(ServerConfig &srv)
 {
-	// ожидаем location <path> {
 	expectToken("location");
 	std::string path = getToken();
-	expectToken("{");
 
 	LocationConfig loc;
-	loc.path = path;
+	
+	if(path == "~")
+	{
+		loc.path = getToken();
+	}
+	else
+	{
+		loc.path = path;
+	}
+
+	expectToken("{");
 
 	while (!isEnd())
 	{
@@ -265,6 +274,7 @@ void Parser::parseLocationDirective(LocationConfig &loc, const std::string &dire
 	}
 	else if (directive == "cgi_extension")
 	{
+		
 		loc.cgi_extension = getToken();
 		expectToken(";");
 	}

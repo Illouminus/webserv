@@ -109,9 +109,19 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
 
 const LocationConfig *Responder::findLocation(const ServerConfig &srv, const std::string &path)
 {
+
+	std::string ext = extractExtention(path);
+	for(size_t i = 0; i < srv.locations.size(); i++)
+	{
+		if(!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
+		{
+			return &srv.locations[i];
+		}
+	}
+
 	size_t bestMatch = 0;
 	const LocationConfig *bestLoc = NULL;
-
+	
 	for (size_t i = 0; i < srv.locations.size(); i++)
 	{
 		const std::string &locPath = srv.locations[i].path;
@@ -346,7 +356,6 @@ HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &
 	// Otherwise, proceed as static file or autoindex
 	std::string realFilePath = buildFilePath(server, loc, reqPath);
 
-	std::cout << "GET REAL PATH: " << realFilePath << std::endl;
 
 	struct stat st;
 	if (stat(realFilePath.c_str(), &st) == 0)
@@ -503,43 +512,24 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
                                   const LocationConfig *loc,
                                   const std::string &reqPath)
 {
-    HttpResponse resp;
-
-    // 1) Build the script path on disk, e.g. "/var/www/site1/cgi-bin/test.php"
+    // 1) Построение пути к скрипту
     std::string scriptPath = buildFilePath(server, loc, reqPath);
 
-    // 2) Detect interpreter
-    //    Option A: If loc->cgi_pass is not empty => use that
-    //    Option B: Or check extension
+    // 2) Определяем интерпретатор по настройкам из конфигурации
     std::string cgiInterpreter;
-
     size_t dotPos = scriptPath.rfind('.');
-    if (dotPos == std::string::npos)
-    {
-        return makeErrorResponse(403, "Forbidden", server,
-                                     "No CGI extension found\n");
+    if (dotPos == std::string::npos) {
+        return makeErrorResponse(403, "Forbidden", server, "No CGI extension found\n");
     }
-    std::string ext = scriptPath.substr(dotPos); // e.g. ".php" or ".sh"
+    std::string ext = scriptPath.substr(dotPos);
+    if (loc->cgi_extension == ext) {
+        cgiInterpreter = loc->cgi_pass;
+    } else {
+        return makeErrorResponse(403, "Forbidden", server, "Unsupported CGI extension\n");
+    }
 
-    if (ext == ".php")
-    {
-        cgiInterpreter = "/usr/bin/php"; // or "/usr/bin/php-cgi" /opt/homebrew/bin/php-cg
-    }
-    else if (ext == ".sh")
-    {
-        cgiInterpreter = "/bin/sh";
-    }
-    else
-    {
-        return makeErrorResponse(403, "Forbidden", server,
-                                     "Unsupported CGI extension\n");
-    }
-    
-
-    // 3) Build environment variables (envVec)
+    // 3) Формирование переменных окружения (как раньше)
     std::vector<std::string> envVec;
-
-    // (a) REQUEST_METHOD
     {
         std::string methodStr;
         switch (parser.getMethod())
@@ -548,153 +538,198 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
             case HTTP_METHOD_POST:   methodStr = "POST";   break;
             case HTTP_METHOD_DELETE: methodStr = "DELETE"; break;
             case HTTP_METHOD_PUT:    methodStr = "PUT";    break;
-            default:                 methodStr = "UNKNOWN";
+            default:                 methodStr = "UNKNOWN"; break;
         }
         envVec.push_back("REQUEST_METHOD=" + methodStr);
     }
-
-    // (b) CONTENT_LENGTH, CONTENT_TYPE (if POST/PUT)
     if (parser.getMethod() == HTTP_METHOD_POST || parser.getMethod() == HTTP_METHOD_PUT)
     {
-        // content-length
         std::ostringstream oss;
         oss << parser.getBody().size();
         envVec.push_back("CONTENT_LENGTH=" + oss.str());
-
-        // content-type (use parser.getHeaders() if you want the real one)
-        // For now, we hardcode to text/plain
         envVec.push_back("CONTENT_TYPE=text/plain");
     }
-
-    // (c) SERVER_PROTOCOL
-    envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion()); // e.g. "HTTP/1.1"
-
-    // (d) SCRIPT_FILENAME (often needed by php-cgi)
+    envVec.push_back("SERVER_PROTOCOL=" + parser.getVersion());
     envVec.push_back("SCRIPT_FILENAME=" + scriptPath);
-
-    // (e) QUERY_STRING — we assume parser has getQuery()
-    // if not, you can do your own parse of ? in path
     envVec.push_back("QUERY_STRING=" + parser.getQuery());
-
-    // (f) Some CGI variables that php-cgi typically requires
     envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
     envVec.push_back("REDIRECT_STATUS=200");
 
-    // Optionally: SERVER_NAME, SERVER_SOFTWARE, etc. could be added
-    // envVec.push_back("SERVER_NAME=localhost");
-    // envVec.push_back("SERVER_SOFTWARE=webserv/1.0");
-
-    // 4) Convert envVec -> envp (null-terminated array of char*)
+    // 4) Преобразование в массив char*
     std::vector<char *> envp;
-    for (size_t i = 0; i < envVec.size(); i++)
-    {
+    for (size_t i = 0; i < envVec.size(); i++) {
         envp.push_back(const_cast<char *>(envVec[i].c_str()));
     }
     envp.push_back(NULL);
 
-    // 5) Build args array: [cgiInterpreter, scriptPath, NULL]
+    // 5) Формируем аргументы для execve: [cgiInterpreter, scriptPath, NULL]
     std::vector<char *> args;
     args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
     args.push_back(const_cast<char *>(scriptPath.c_str()));
     args.push_back(NULL);
 
-    // 6) Create pipes
+    // 6) Создаем каналы
     int pipeOut[2];
-    if (pipe(pipeOut) == -1)
-    {
-        return makeErrorResponse(500, "Internal Server Error", server,
-                                 "Failed to create pipeOut\n");
+    if (pipe(pipeOut) == -1) {
+        return makeErrorResponse(500, "Internal Server Error", server, "Failed to create pipeOut\n");
     }
-
     bool hasBody = !parser.getBody().empty();
     int pipeIn[2];
-    if (hasBody)
-    {
-        if (pipe(pipeIn) == -1)
-        {
+    if (hasBody) {
+        if (pipe(pipeIn) == -1) {
             close(pipeOut[0]);
             close(pipeOut[1]);
-            return makeErrorResponse(500, "Internal Server Error", server,
-                                     "Failed to create pipeIn\n");
+            return makeErrorResponse(500, "Internal Server Error", server, "Failed to create pipeIn\n");
         }
     }
 
     // 7) Fork
     pid_t pid = fork();
-    if (pid < 0)
-    {
-        // fork failed
+    if (pid < 0) {
         close(pipeOut[0]);
         close(pipeOut[1]);
-        if (hasBody)
-        {
+        if (hasBody) {
             close(pipeIn[0]);
             close(pipeIn[1]);
         }
-        return makeErrorResponse(500, "Internal Server Error", server,
-                                 "Fork failed\n");
+        return makeErrorResponse(500, "Internal Server Error", server, "Fork failed\n");
     }
-    else if (pid == 0)
-    {
-        // -- Child process --
-
-        // Redirect STDOUT to pipeOut[1]
+    else if (pid == 0) {
+        // --- Дочерний процесс ---
+        // Перенаправляем STDOUT и STDERR в pipeOut[1]
         dup2(pipeOut[1], STDOUT_FILENO);
+        dup2(pipeOut[1], STDERR_FILENO);
         close(pipeOut[0]);
         close(pipeOut[1]);
 
-        // If we have request body, tie pipeIn[0] -> STDIN
-        if (hasBody)
-        {
+        if (hasBody) {
             dup2(pipeIn[0], STDIN_FILENO);
             close(pipeIn[1]);
             close(pipeIn[0]);
         }
 
-        // execve
+        // Запускаем CGI-скрипт
         execve(args[0], &args[0], &envp[0]);
-        // If execve fails, exit child
+        // Если execve не сработало, завершаем с ошибкой
         _exit(1);
     }
-    else
-    {
-        // -- Parent process --
-
-        // We don't write to pipeOut[1]
-        close(pipeOut[1]);
-
-        if (hasBody)
-        {
-            // Write the request body to child's stdin
+    else {
+        // --- Родительский процесс ---
+        close(pipeOut[1]);  // закрываем неиспользуемый конец для записи
+        if (hasBody) {
             close(pipeIn[0]);
             write(pipeIn[1], parser.getBody().c_str(), parser.getBody().size());
             close(pipeIn[1]);
         }
-
-        // Read child's stdout
-        std::ostringstream cgiOutput;
-        char buf[1024];
-        ssize_t rd;
-        while ((rd = read(pipeOut[0], buf, sizeof(buf))) > 0)
-        {
-            cgiOutput.write(buf, rd);
-        }
-        close(pipeOut[0]);
-
-        // Wait for child
-        int status;
-        waitpid(pid, &status, 0);
-
-        // Build response
-        HttpResponse resp;
-        resp.setStatus(200, "OK");
-        resp.setHeader("Content-Type", "text/html");
-        resp.setBody(cgiOutput.str());
-
-        return resp;
+        // Вызовем функцию для обработки вывода дочернего процесса
+        HttpResponse response = processCgiOutput(pipeOut[0], pid);
+        std::cout << "CGI response: " << response.toString() << std::endl;
+        return response;
     }
 
-    // Should not reach here
-    return makeErrorResponse(500, "Internal Server Error", server,
-                             "Unknown CGI error\n");
+    return makeErrorResponse(500, "Internal Server Error", server, "Unknown CGI error\n");
+}
+
+
+HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
+{
+    // 1. Считываем весь вывод ребенка из pipeFd
+    std::ostringstream cgiOutput;
+    char buf[1024];
+    ssize_t bytesRead;
+    while ((bytesRead = read(pipeFd, buf, sizeof(buf))) > 0) {
+        cgiOutput.write(buf, bytesRead);
+    }
+    close(pipeFd);
+
+    // 2. Ждем завершения дочернего процесса
+    int status;
+    waitpid(childPid, &status, 0);
+    std::string output = cgiOutput.str();
+
+    // Если процесс завершился с ошибкой, возвращаем ответ с ошибкой,
+    // включающий вывод CGI для отладки.
+    if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
+        HttpResponse err;
+        err.setStatus(500, "Internal Server Error");
+        err.setHeader("Content-Type", "text/html");
+        std::ostringstream errBody;
+        errBody << "<html><body><h1>CGI Execution Error</h1>"
+                << "<pre>" << output << "</pre></body></html>";
+        err.setBody(errBody.str());
+        // Можно установить Content-Length, если требуется
+        std::ostringstream oss;
+        oss << errBody.str().size();
+        err.setHeader("Content-Length", oss.str());
+        return err;
+    }
+
+    // 3. Парсим вывод CGI-скрипта на заголовки и тело.
+    // Ожидается, что CGI-скрипт выводит сначала заголовки, затем пустую строку, а затем тело.
+    std::istringstream iss(output);
+    std::string line;
+    std::map<std::string, std::string> headers;
+    std::string body;
+
+    while (std::getline(iss, line)) {
+        // Если строка оканчивается на '\r', удаляем его.
+        if (!line.empty() && line[line.size() - 1] == '\r')
+            line.erase(line.size() - 1);
+
+        // Пустая строка сигнализирует об окончании заголовков.
+        if (line == "")
+            break;
+
+        // Разбираем строку вида "Key: Value"
+        std::string::size_type pos = line.find(':');
+        if (pos != std::string::npos) {
+            std::string key = line.substr(0, pos);
+            std::string value = line.substr(pos + 1);
+            // Удаляем ведущие пробелы из value.
+            while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
+                value.erase(0, 1);
+            headers[key] = value;
+        }
+    }
+
+    // Остаток потока – это тело ответа.
+    std::ostringstream bodyStream;
+    bodyStream << iss.rdbuf();
+    body = bodyStream.str();
+
+    // 4. Удаляем возможный заголовок Content-Length, чтобы не перезаписывать тело пустым значением.
+    if (headers.find("Content-Length") != headers.end())
+        headers.erase("Content-Length");
+
+    // 5. Формируем объект HttpResponse.
+    HttpResponse resp;
+    int statusCode = 200;
+    std::string reasonPhrase = "OK";
+
+    // Если среди заголовков есть "Status", используем его для установки кода.
+    if (headers.find("Status") != headers.end()) {
+        std::istringstream statusLine(headers["Status"]);
+        statusLine >> statusCode;
+        std::getline(statusLine, reasonPhrase);
+        while (!reasonPhrase.empty() && (reasonPhrase[0] == ' ' || reasonPhrase[0] == '\t'))
+            reasonPhrase.erase(0, 1);
+        headers.erase("Status");
+    }
+    resp.setStatus(statusCode, reasonPhrase);
+
+    // Устанавливаем остальные заголовки.
+    for (std::map<std::string, std::string>::iterator it = headers.begin();
+         it != headers.end(); ++it) {
+        resp.setHeader(it->first, it->second);
+    }
+
+    // Устанавливаем тело ответа.
+    resp.setBody(body);
+
+    // Вычисляем и устанавливаем корректный Content-Length.
+    std::ostringstream oss;
+    oss << body.size();
+    resp.setHeader("Content-Length", oss.str());
+
+    return resp;
 }

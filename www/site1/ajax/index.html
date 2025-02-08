@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Тестовая страница</title>
+  <link rel="stylesheet" href="style.css">
+  <script type="text/javascript">
+    function loadPhpContent() {
+      var xhr = new XMLHttpRequest();
+      xhr.open("GET", "./ajax/test1.php", true);  // URL должен соответствовать реальному расположению файла
+      xhr.onload = function() {
+        if (xhr.readyState === 4) {
+          if (xhr.status === 200) {
+            console.log("Получен ответ:", xhr.responseText);
+            document.getElementById('phpContent').innerHTML = xhr.responseText;
+          } else {
+            document.getElementById('phpContent').innerHTML = "<p>Ошибка загрузки PHP-контента (статус " + xhr.status + ")</p>";
+          }
+        }
+      };
+      xhr.send();
+    }
+    
+    window.onload = function() {
+      loadPhpContent();
+    };
+  </script>
+</head>
+<body>
+  <h1>Добро пожаловать на тестовую страницу</h1>
+  <div id="phpContent">
+    <p>Загрузка PHP-контента...</p>
+  </div>
+</body>
+</html>

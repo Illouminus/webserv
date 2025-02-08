@@ -17,6 +17,7 @@ int main(int argc, char *argv[])
 	{
 		p.parseConfig(configFile);
 		WebServ ws(p.getServers());
+		//printConf(p.getServers());
 		ws.start();
 	}
 	catch (std::exception &e)
