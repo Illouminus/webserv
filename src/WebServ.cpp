@@ -181,23 +181,17 @@ void WebServ::handleClientRead(int fd, Responder &responder)
         {
             std::string hostHeader = parser.getHeader("Host");
             std::string hostOnly = extractHostWithoutPort(hostHeader);
-
             const std::vector<ServerConfig> &sv = *(_clientToServers[fd]);
             const ServerConfig &chosen = chooseServer(sv, hostOnly);
-
-            // устанавливаем max_body_size
 			parser.setChosenServer(chosen);
-            parser.setMaxBodySize(chosen.max_body_size);
-
-            // отмечаем, что сервер уже выбран
             parser.setServerSelected(true);
         }
 
 
 		 if (parser.hasError()) {
-			const ServerConfig *srv = parser.serverIsChosen() ? parser.getChosenServer()
-            : NULL;
+			const ServerConfig *srv = parser.serverIsChosen() ? parser.getChosenServer() : NULL;
             HttpResponse resp;
+
 		 if (parser.getErrorCode() == ERR_413) {
 			if (srv)
 				resp = responder.makeErrorResponse(413, "Payload Too Large", *srv,
@@ -249,6 +243,7 @@ void WebServ::handleClientRead(int fd, Responder &responder)
 void WebServ::handleClientWrite(int fd)
 {
 	std::string &buffer = _writeBuffers[fd];
+	std::cout << "Sending response: " << buffer.c_str() << std::endl;
 	ssize_t sent = send(fd, buffer.c_str(), buffer.size(), MSG_NOSIGNAL);
 
 	if (sent > 0)

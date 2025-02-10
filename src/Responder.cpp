@@ -49,7 +49,6 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
         // store in global map 
         this->g_sessions[newSid] = "Some user data or empty string";
         // (optional) we can do a debug print
-        std::cout << "New session_id created: " << newSid << std::endl;
     }
     else
     {
@@ -61,10 +60,25 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
     // 1) Find matching location
     std::string path = parser.getPath();
 
-	const LocationConfig *loc = findLocation(server, path);
+	const LocationConfig *loc = findLocation(server, parser);
+    size_t max_body_size;
+    // check if body size is too big
+
+
+    if(server.max_body_size > 0 && loc->max_body_size == 0)
+        max_body_size = server.max_body_size;
+    else 
+        max_body_size = loc->max_body_size;
+    
+    if (max_body_size > 0 && parser.getBody().size() > max_body_size)
+    {
+        return this->makeErrorResponse(413, "Request Entity Too Large", server, "Request Entity Too Large\n");
+    }
+
 
     // 2) Check if method is allowed
     HttpMethod method = parser.getMethod();
+    std::cout << "Method: " << method << std::endl;
     std::string allowHeader;
     if (!isMethodAllowed(method, server, loc, allowHeader))
         return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
@@ -107,36 +121,72 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
  * Finds the best matching location for the given path.
  */
 
-const LocationConfig *Responder::findLocation(const ServerConfig &srv, const std::string &path)
+const LocationConfig *Responder::findLocation(const ServerConfig &srv, const HttpParser &parser)
 {
+    std::string path = parser.getPath();
+    HttpMethod method = parser.getMethod();
 
-	std::string ext = extractExtention(path);
-	for(size_t i = 0; i < srv.locations.size(); i++)
-	{
-		if(!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
-		{
-			return &srv.locations[i];
-		}
-	}
+    // Преобразуем enum метода в строку (например, "GET", "POST", "PUT", "DELETE")
+    std::string methodStr;
+    switch (method)
+    {
+        case HTTP_METHOD_GET:    methodStr = "GET"; break;
+        case HTTP_METHOD_POST:   methodStr = "POST"; break;
+        case HTTP_METHOD_PUT:    methodStr = "PUT"; break;
+        case HTTP_METHOD_DELETE: methodStr = "DELETE"; break;
+        default:                 methodStr = "";
+    }
 
-	size_t bestMatch = 0;
-	const LocationConfig *bestLoc = NULL;
-	
-	for (size_t i = 0; i < srv.locations.size(); i++)
-	{
-		const std::string &locPath = srv.locations[i].path;
-		// If path begins with locPath
-		if (path.compare(0, locPath.size(), locPath) == 0)
-		{
-			if (locPath.size() > bestMatch)
-			{
-				bestMatch = locPath.size();
-				bestLoc = &srv.locations[i];
-			}
-		}
-	}
-	return bestLoc;
+    // Первый проход: ищем location с заданным CGI-расширением,
+    // и проверяем, что разрешён данный метод (если список методов не пуст)
+    std::string ext = extractExtention(path);
+    for (size_t i = 0; i < srv.locations.size(); i++)
+    {
+        if (!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
+        {
+            // Если в конфигурации location явно указаны разрешённые методы, проверяем их
+            if (!srv.locations[i].methods.empty())
+            {
+                bool allowed = false;
+                for (size_t j = 0; j < srv.locations[i].methods.size(); j++)
+                {
+                    if (srv.locations[i].methods[j] == methodStr)
+                    {
+                        allowed = true;
+                        break;
+                    }
+                }
+                if (!allowed)
+                {
+                    // Метод не разрешён для этой CGI-локации, пропускаем её
+                    continue;
+                }
+            }
+            // Нашли подходящую CGI-локацию
+            return &srv.locations[i];
+        }
+    }
+
+    // Если подходящая CGI-локация не найдена,
+    // выполняем стандартный перебор по префиксному совпадению.
+    size_t bestMatch = 0;
+    const LocationConfig *bestLoc = NULL;
+    for (size_t i = 0; i < srv.locations.size(); i++)
+    {
+        const std::string &locPath = srv.locations[i].path;
+        // Если запрошенный путь начинается с locPath
+        if (path.compare(0, locPath.size(), locPath) == 0)
+        {
+            if (locPath.size() > bestMatch)
+            {
+                bestMatch = locPath.size();
+                bestLoc = &srv.locations[i];
+            }
+        }
+    }
+    return bestLoc;
 }
+
 /**
  * getContentTypeByExtension()
  * Returns a Content-Type based on the file's extension
@@ -431,6 +481,7 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
 
 	HttpResponse resp;
 	// If there's an upload store => save body as a file
+	std::cout << loc->upload_store << std::endl;
 	if (!loc || loc->upload_store.empty())
 	{
 		resp.setStatus(403, "Forbidden");

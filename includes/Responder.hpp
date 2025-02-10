@@ -22,6 +22,8 @@ public:
 	// Возвращаем готовый HttpResponse
 	HttpResponse handleRequest(const HttpParser &parser, const ServerConfig &server);
 
+	const LocationConfig *findLocation(const ServerConfig &server, const HttpParser &parser);
+
 	HttpResponse makeErrorResponse(int code, const std::string &reason,
 											 const ServerConfig &server,
 											 const std::string &defaultMessage);
@@ -30,7 +32,6 @@ private:
 	
 	static std::map<std::string, std::string> g_sessions;
 	// Вспомогательная функция: находим нужную LocationConfig*
-	const LocationConfig *findLocation(const ServerConfig &server, const std::string &path);
 
 	// Можно добавить метод для определения Content-Type по расширению
 	std::string getContentTypeByExtension(const std::string &path);

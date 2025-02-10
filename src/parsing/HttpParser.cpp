@@ -1,5 +1,6 @@
 #include "HttpParser.hpp"
 #include <sstream>
+#include <cerrno>
 #include <algorithm>
 #include <cctype>
 #include <stdexcept>
@@ -179,7 +180,9 @@ void HttpParser::parseHeaders()
             parseRequestLine(line);
             firstLine = false;
             if (_status == PARSING_ERROR)
+            {   
                 return; // Ошибка в request line
+            }
         } else {
             parseHeaderLine(line);
             if (_status == PARSING_ERROR)
@@ -207,7 +210,6 @@ void HttpParser::parseHeaders()
     if (_headers.find("content-length") != _headers.end()) {
         long cl = std::atol(_headers["content-length"].c_str());
         if (cl < 0) {
-            std::cout << "ОШИБКА 1 " << std::endl;
             _status = PARSING_ERROR;
             _errorCode = ERR_400;
             return;
@@ -231,7 +233,6 @@ void HttpParser::parseRequestLine(const std::string &line)
     if (!(iss >> methodStr >> rawPath >> versionStr)) 
     {
         _status = PARSING_ERROR;
-        std::cout << "ОШИБКА 2 " << std::endl;
         _errorCode = ERR_400;
         return;
     }
@@ -262,11 +263,9 @@ void HttpParser::parseRequestLine(const std::string &line)
 
     // 3) Protocol version
     _version = versionStr;
-    std::cout << "Version: " << _version << std::endl;
     if (_version != "HTTP/1.1" && _version != "HTTP/1.0")
     {
         _status = PARSING_ERROR;
-        std::cout << "ОШИБКА 3 " << std::endl;
         _errorCode = ERR_400;
         return;
     }
@@ -308,7 +307,6 @@ void HttpParser::parseHeaderLine(const std::string &line)
 	if (pos == std::string::npos)
 		{
 			_status = PARSING_ERROR; // 400 Bad Request;
-            std::cout << "ОШИБКА 4 " << std::endl;
 			_errorCode = ERR_400;
 			return;
 		}
@@ -325,6 +323,7 @@ void HttpParser::parseHeaderLine(const std::string &line)
 	// To lowercase
 	std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
+    std::cout << "Header: " << key << " = " << value << std::endl;
 	_headers[key] = value;
 }
 
@@ -348,98 +347,114 @@ ParserError HttpParser::getErrorCode() const
 	return _errorCode;
 }
 
+// Функтор для проверки, что символ не является пробельным (C++98)
+struct IsNotSpace {
+    bool operator()(char ch) const {
+        return !std::isspace((unsigned char)ch);
+    }
+};
 
-long HttpParser::parseHexNumber(const std::string &hexStr)
-{
+// Функция для обрезки пробелов с начала и конца строки (C++98)
+static std::string trim(const std::string &s) {
+    std::string result = s;
+    result.erase(result.begin(), std::find_if(result.begin(), result.end(), IsNotSpace()));
+    result.erase(std::find_if(result.rbegin(), result.rend(), IsNotSpace()).base(), result.end());
+    return result;
+}
+
+long HttpParser::parseHexNumber(const std::string &hexStr) {
+    // Отделяем расширения: берем подстроку до символа ';'
+    size_t pos = hexStr.find(';');
+    std::string token = (pos == std::string::npos) ? hexStr : hexStr.substr(0, pos);
+
+    // Обрезаем пробелы
+    token = trim(token);
+    if (token.empty()) {
+        return -1;
+    }
+
     char *endptr = NULL;
-    long val = std::strtol(hexStr.c_str(), &endptr, 16);
+    errno = 0;
+    long val = std::strtol(token.c_str(), &endptr, 16);
+    if (errno == ERANGE) {
+        // Число слишком велико для типа long
+        return -2;
+    }
     if (*endptr != '\0') {
-        // Not a valid hex number
         return -1;
     }
     if (val < 0) {
-        // Negative number
         return -1;
     }
     return val;
 }
 
-void HttpParser::parseChunkedBody()
-{
-	
-	while(_status == PARSING_CHUNKED)
-	{
-		// 1) Find the position of \r\n for the chunk size
+void HttpParser::parseChunkedBody() {
 
-		size_t posRN = _buffer.find("\r\n");
+    while (_status == PARSING_CHUNKED) {
+        // 1) Ищем позицию "\r\n" в буфере (конец строки с размером чанка)
+        size_t posRN = _buffer.find("\r\n");
+        if (posRN == std::string::npos)
+            return; // ждём больше данных
 
-		if(posRN == std::string::npos)
-		 return ; // wait for more data
+        // 2) Извлекаем строку с размером чанка
+        std::string hexLen = _buffer.substr(0, posRN);
+        std::cout << "Chunk size: " << hexLen << std::endl;
+        _buffer.erase(0, posRN + 2); // удаляем размер и "\r\n"
 
-		// 2) Get the chunk size in hex
+        // 3) Преобразуем строку в число
+        long chunkSize = parseHexNumber(hexLen);
+        if (chunkSize == -2) {
+            // Переполнение – число слишком большое
+            std::cout << "Chunk size too large (overflow)" << std::endl;
+            _status = PARSING_ERROR;
+            _errorCode = ERR_413;  // Request Entity Too Large
+            return;
+        }
+        if (chunkSize < 0) {
+            std::cout << "Error parsing chunk size" << std::endl;
+            _status = PARSING_ERROR;
+            _errorCode = ERR_400;  // Bad Request
+            return;
+        }
 
-		std::string hexLen = _buffer.substr(0, posRN);
-		_buffer.erase(0, posRN + 2); // Erase the chunk size and \r\n
+        // 4) Если размер чанка равен 0 – это последний чанк
+        if (chunkSize == 0) {
+            // Можно удалить завершающий CRLF, если есть
+            if (_buffer.size() >= 2 && _buffer.substr(0,2) == "\r\n")
+                _buffer.erase(0,2);
+            _status = COMPLETE;
+            return;
+        }
 
-		// 3) Convert the hex string to size_t
+        // 5) Проверяем, что в буфере достаточно данных для чанка (данные + CRLF)
+        if (_buffer.size() < static_cast<size_t>(chunkSize) + 2)
+            return; // ждем больше данных
 
-		long chunkSize = parseHexNumber(hexLen);
-
-		if(chunkSize < 0)
-		{
-			_status = PARSING_ERROR;
-			_errorCode = ERR_501;
-			return;
-		}
-
-		// 4) If chunk size is 0, then this is the last chunk
-
-		if(chunkSize == 0)
-		{
-			_status = COMPLETE;
-			return;
-		}
-
-		// 5) Check if the buffer has enough data to read the chunk
-
-		if(_buffer.size() < static_cast<size_t>(chunkSize) + 2)
-			return; // wait for more data
-
-		// 6) Read the chunk and erase it from the buffer
-
-		std::string chunkData = _buffer.substr(0, chunkSize);
+        // 6) Извлекаем данные чанка
+        std::string chunkData = _buffer.substr(0, chunkSize);
         _buffer.erase(0, chunkSize);
 
-		if (_buffer.size() < 2)
-        {
-            // The chunk should end with \r\n
-            _status = PARSING_ERROR;
-
-            _errorCode = ERR_400;
-            return;
-        }
-
-		if (_buffer[0] != '\r' || _buffer[1] != '\n')
-        {
-            // Format error
+        // 7) Проверяем, что после данных идёт "\r\n"
+        if (_buffer.size() < 2) {
             _status = PARSING_ERROR;
             _errorCode = ERR_400;
             return;
         }
+        if (_buffer[0] != '\r' || _buffer[1] != '\n') {
+            _status = PARSING_ERROR;
+            _errorCode = ERR_400;
+            return;
+        }
+        _buffer.erase(0, 2); // удаляем "\r\n"
 
-		_buffer.erase(0, 2); // Erase the \r\n
-
-		// 7) Append the chunk data to the body
-
-		_body += chunkData;
-
-		// 8) Check if the body size is not too big
+        // 8) Добавляем данные чанка к телу
+        _body += chunkData;
 
         if (_maxBodySize > 0 && _body.size() > _maxBodySize) {
             _status = PARSING_ERROR;
             _errorCode = ERR_413;
             return;
         }
-	}
-
+    }
 }

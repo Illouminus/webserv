@@ -42,6 +42,7 @@ void printConf(const std::vector<ServerConfig> &servers)
 			std::cout << "    autoindex: " << (loc.autoindex ? "on" : "off") << "\n";
 			std::cout << "    cgi_pass: " << loc.cgi_pass << "\n";
 			std::cout << "    cgi_extension: " << loc.cgi_extension << "\n";
+			std::cout << "    max_body_size: " << loc.max_body_size << "\n";
 		}
 	}
 }
