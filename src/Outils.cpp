@@ -1,3 +1,4 @@
+#include "Outils.hpp"
 #include <string>
 #include <map>
 #include <iostream>
@@ -8,7 +9,11 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-std::map<std::string, std::string> parseCookieString(const std::string &cookieStr)
+
+Outils::Outils() {};
+Outils::~Outils() {};
+
+std::map<std::string, std::string> Outils::parseCookieString(const std::string &cookieStr)
 {
     std::map<std::string, std::string> result;
     if (cookieStr.empty())
@@ -58,7 +63,7 @@ std::map<std::string, std::string> parseCookieString(const std::string &cookieSt
 
 
 
-std::string generateRandomSessionID()
+std::string Outils::generateRandomSessionID()
 {
     // Very trivial random
     // You can do something better with <random> or time
@@ -74,10 +79,72 @@ std::string generateRandomSessionID()
 }
 
 
-std::string extractExtention(std::string path)
+std::string Outils::extractExtention(std::string path)
 {
     size_t pos = path.rfind('.');
     if (pos == std::string::npos)
         return "";
     return path.substr(pos);
+}
+
+
+std::string Outils::trim(const std::string &s) {
+    std::string result = s;
+    // Удаляем пробелы с начала
+    size_t start = 0;
+    while (start < result.size() && std::isspace(result[start])) {
+        ++start;
+    }
+    // Удаляем пробелы с конца
+    size_t end = result.size();
+    while (end > start && std::isspace(result[end - 1])) {
+        --end;
+    }
+    return result.substr(start, end - start);
+}
+
+
+void Outils::printConf(const std::vector<ServerConfig> &servers)
+{
+	for (size_t i = 0; i < servers.size(); i++)
+	{
+		const ServerConfig &srv = servers[i];
+		std::cout << "Server " << i << ": " << srv.host << ":" << srv.port << "\n";
+		std::cout << "  server_name: " << srv.server_name << "\n";
+		std::cout << "  root: " << srv.root << "\n";
+		std::cout << "  max_body_size: " << srv.max_body_size << "\n";
+		std::cout << "  autoindex: " << (srv.autoindex ? "on" : "off") << "\n";
+
+		std::cout << "  error_pages:\n";
+		for (std::map<int, std::string>::const_iterator it = srv.error_pages.begin(); it != srv.error_pages.end(); ++it)
+		{
+			std::cout << "    " << it->first << " -> " << it->second << "\n";
+		}
+
+		std::cout << "  methods:";
+		for (size_t j = 0; j < srv.methods.size(); j++)
+		{
+			std::cout << " " << srv.methods[j];
+		}
+		std::cout << "\n";
+
+		// Locations
+		for (size_t k = 0; k < srv.locations.size(); k++)
+		{
+			const LocationConfig &loc = srv.locations[k];
+			std::cout << "  Location: " << loc.path << "\n";
+			std::cout << "    methods:";
+			for (size_t j = 0; j < loc.methods.size(); j++)
+			{
+				std::cout << " " << loc.methods[j];
+			}
+			std::cout << "\n";
+			std::cout << "    root: " << loc.root << "\n";
+			std::cout << "    index: " << loc.index << "\n";
+			std::cout << "    autoindex: " << (loc.autoindex ? "on" : "off") << "\n";
+			std::cout << "    cgi_pass: " << loc.cgi_pass << "\n";
+			std::cout << "    cgi_extension: " << loc.cgi_extension << "\n";
+			std::cout << "    max_body_size: " << loc.max_body_size << "\n";
+		}
+	}
 }

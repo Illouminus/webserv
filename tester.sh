@@ -1,142 +1,172 @@
 #!/bin/bash
-# tester.sh — простой тестер для проверки работы вашего сервера по конфигурации.
-# Используются только CGI для PHP и SH.
-# Зеленым цветом выводится SUCCESS, красным — FAIL.
+# tester.sh — Simple tester for verifying your server configuration.
+# Only CGI for PHP and Shell is supported.
+# Successful tests will be marked with a green check (✔) and failed ones with a red cross (✖).
 
-# ANSI escape-последовательности для цветов:
-GREEN="\033[32m"
+# ANSI escape sequences for colors:
+GREEN="\e[0;32m"
 RED="\033[31m"
-NC="\033[0m"  # сброс цвета
+YELLOW="\033[33m"
+CYAN="\033[36m"
+NC="\033[0m"  # No Color (reset)
 
-# Функция для тестирования GET-запроса
+# Unicode symbols
+CHECK_MARK="✔"
+CROSS_MARK="✖"
+
+# Function to print a header with a separator
+function print_header() {
+    echo -e "\n${CYAN}========== $1 ==========${NC}"
+}
+
+# Function to test GET requests.
+# Arguments:
+#   $1 - URL
+#   $2 - Host header value (if needed)
+#   $3 - Expected HTTP status code
+#   $4 - Test description
 function test_get() {
     url="$1"
-    host="$2"        # значение для заголовка Host (если нужно)
-    expected="$3"    # ожидаемый HTTP-статус
+    host="$2"
+    expected="$3"
     desc="$4"
-    echo -n "GET $url [$desc]: "
+    echo -e "${YELLOW}GET${NC} $url [$desc]: "
     if [ -n "$host" ]; then
-        code=$(curl -s -o /dev/null -w "%{http_code}" -H "Host: $host" "$url")
+        code=$(curl -s -H "Host: $host" -H "Connection: close" -o /dev/null -w "%{http_code}" "$url")
     else
-        code=$(curl -s -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -H "Connection: close" -o /dev/null -w "%{http_code}" "$url")
     fi
     if [ "$code" -eq "$expected" ]; then
-        echo -e "${GREEN}SUCCESS${NC} (status: $code)"
+        echo -e "${GREEN}${CHECK_MARK} SUCCESS${NC} (status: $code)"
     else
-        echo -e "${RED}FAIL${NC} (status: $code, expected: $expected)"
+        echo -e "${RED}${CROSS_MARK} FAIL${NC} (status: $code, expected: $expected)"
     fi
 }
 
-# Функция для тестирования POST-запроса с данными (без chunked)
+# Function to test POST requests (non-chunked).
+# Arguments:
+#   $1 - URL
+#   $2 - Host header value (if needed)
+#   $3 - POST data (e.g., form-urlencoded string)
+#   $4 - Expected HTTP status code
+#   $5 - Test description
 function test_post() {
     url="$1"
     host="$2"
     data="$3"
     expected="$4"
     desc="$5"
-    echo -n "POST $url [$desc]: "
+    echo -e "${YELLOW}POST${NC} $url [$desc]: "
     if [ -n "$host" ]; then
-        code=$(curl -s -X POST -H "Host: $host" -d "$data" -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X POST -H "Host: $host" -H "Connection: close" -d "$data" -o /dev/null -w "%{http_code}" "$url")
     else
-        code=$(curl -s -X POST -d "$data" -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X POST -H "Connection: close" -d "$data" -o /dev/null -w "%{http_code}" "$url")
     fi
     if [ "$code" -eq "$expected" ]; then
-        echo -e "${GREEN}SUCCESS${NC} (status: $code)"
+        echo -e "${GREEN}${CHECK_MARK} SUCCESS${NC} (status: $code)"
     else
-        echo -e "${RED}FAIL${NC} (status: $code, expected: $expected)"
+        echo -e "${RED}${CROSS_MARK} FAIL${NC} (status: $code, expected: $expected)"
     fi
 }
 
-# Функция для тестирования POST-запроса с Transfer-Encoding: chunked
+# Function to test POST requests with Transfer-Encoding: chunked.
+# Arguments:
+#   $1 - URL
+#   $2 - Host header value (if needed)
+#   $3 - File to send as POST body
+#   $4 - Expected HTTP status code
+#   $5 - Test description
 function test_post_chunked() {
     url="$1"
     host="$2"
     file="$3"
     expected="$4"
     desc="$5"
-    echo -n "POST (chunked) $url with file $file [$desc]: "
+    echo -e "${YELLOW}POST (chunked)${NC} $url with file $file [$desc]: "
     if [ -n "$host" ]; then
-        code=$(curl -s -X POST -H "Transfer-Encoding: chunked" -H "Host: $host" --data-binary "@$file" -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X POST -H "Transfer-Encoding: chunked" -H "Host: $host" -H "Connection: close" --data-binary "@$file" -o /dev/null -w "%{http_code}" "$url")
     else
-        code=$(curl -s -X POST -H "Transfer-Encoding: chunked" --data-binary "@$file" -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X POST -H "Transfer-Encoding: chunked" -H "Connection: close" --data-binary "@$file" -o /dev/null -w "%{http_code}" "$url")
     fi
     if [ "$code" -eq "$expected" ]; then
-        echo -e "${GREEN}SUCCESS${NC} (status: $code)"
+        echo -e "${GREEN}${CHECK_MARK} SUCCESS${NC} (status: $code)"
     else
-        echo -e "${RED}FAIL${NC} (status: $code, expected: $expected)"
+        echo -e "${RED}${CROSS_MARK} FAIL${NC} (status: $code, expected: $expected)"
     fi
 }
 
-# Функция для тестирования DELETE-запроса
+# Function to test DELETE requests.
+# Arguments:
+#   $1 - URL
+#   $2 - Host header value (if needed)
+#   $3 - Expected HTTP status code
+#   $4 - Test description
 function test_delete() {
     url="$1"
     host="$2"
     expected="$3"
     desc="$4"
-    echo -n "DELETE $url [$desc]: "
+    echo -e "${YELLOW}DELETE${NC} $url [$desc]: "
     if [ -n "$host" ]; then
-        code=$(curl -s -X DELETE -H "Host: $host" -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X DELETE -H "Host: $host" -H "Connection: close" -o /dev/null -w "%{http_code}" "$url")
     else
-        code=$(curl -s -X DELETE -o /dev/null -w "%{http_code}" "$url")
+        code=$(curl -s -X DELETE -H "Connection: close" -o /dev/null -w "%{http_code}" "$url")
     fi
     if [ "$code" -eq "$expected" ]; then
-        echo -e "${GREEN}SUCCESS${NC} (status: $code)"
+        echo -e "${GREEN}${CHECK_MARK} SUCCESS${NC} (status: $code)"
     else
-        echo -e "${RED}FAIL${NC} (status: $code, expected: $expected)"
+        echo -e "${RED}${CROSS_MARK} FAIL${NC} (status: $code, expected: $expected)"
     fi
 }
 
-echo "=== Testing Server on 127.0.0.1:8080 (server_name: localhost, root: www/site1) ==="
-# GET / -> index.html
-test_get "http://127.0.0.1:8080/" "" 200 "Site1 index"
-# GET /ajax -> index.html from www/site1/ajax
-test_get "http://127.0.0.1:8080/ajax" "" 200 "Site1 ajax index"
-# GET /images -> autoindex (если файлы есть)
-test_get "http://127.0.0.1:8080/images" "" 200 "Site1 images autoindex"
+###########################################
+# Begin Tests
+###########################################
 
-# Тест загрузки файла через /uploads (location /uploads, root www/site1/uploads)
-echo "Test file for upload" > upload_test.txt
-test_post "http://127.0.0.1:8080/uploads/upload_test.txt" "" "$(cat upload_test.txt)" 201 "File upload to /uploads"
-test_delete "http://127.0.0.1:8080/uploads/upload_test.txt" "" 200 "File deletion from /uploads"
+print_header "Testing Server on 127.0.0.1:8080 (server_name: localhost, root: www/site1)"
+
+# GET tests
+test_get "http://127.0.0.1:8080/" "localhost" 200 "Site1 index"
+test_get "http://127.0.0.1:8080/ajax" "localhost" 200 "Site1 ajax index"
+test_get "http://127.0.0.1:8080/images" "localhost" 200 "Site1 images autoindex"
+test_get "http://127.0.0.1:8080/oldpath" "localhost" 301 "Old path redirect"
+
+# POST/DELETE tests (uploads)
+echo "Test file content for upload" > upload_test.txt
+test_post "http://127.0.0.1:8080/uploads/upload_test.txt" "localhost" "$(cat upload_test.txt)" 201 "File upload to /uploads (non-chunked)"
+test_delete "http://127.0.0.1:8080/uploads/upload_test.txt" "localhost" 200 "File deletion from /uploads"
 rm -f upload_test.txt
 
-echo ""
-echo "=== Testing Server on 127.0.0.1:8081 (server_name: localhost, root: www/site2) ==="
-# GET / -> index.html
-test_get "http://127.0.0.1:8081/" "" 200 "Site2 index"
-# GET /secret -> secret page (если существует, ожидаем 200)
-test_get "http://127.0.0.1:8081/secret" "" 200 "Site2 secret"
+print_header "Testing Server on 127.0.0.1:8081 (server_name: localhost, root: www/site2)"
 
-echo ""
-echo "=== Testing 0 on 127.0.0.1:8082 (server_name: mydomain.com, root: www/site2, CGI for .sh) ==="
-# Для этого сервера задаем Host: mydomain.com
-# GET / -> index.php
+test_get "http://127.0.0.1:8081/" "localhost" 200 "Site2 index"
+test_get "http://127.0.0.1:8081/secret" "localhost" 200 "Site2 secret"
+
+print_header "Testing Server on 127.0.0.1:8082 (server_name: mydomain.com, root: www/site2, CGI for .sh)"
+
 test_get "http://127.0.0.1:8082/" "mydomain.com" 200 "Site2 index on mydomain.com"
-# Тест CGI для .sh
-# Создадим простой SH-скрипт в папке www/site2 (предполагается, что location ~ \.sh$ его обработает)
+
+# CGI test for .sh
 echo "#!/bin/sh
 echo 'Content-Type: text/html'
 echo ''
 echo '<h2>Hello from CGI SH</h2>'" > www/site2/test.sh
 chmod +x www/site2/test.sh
 test_post "http://127.0.0.1:8082/test.sh" "mydomain.com" "data=foo" 200 "CGI .sh execution on mydomain.com"
+rm -f www/site2/test.sh
 
-echo ""
-echo "=== Testing Server on 127.0.0.1:8080 (server_name: mydomain.com, root: www/site2) ==="
-# Этот сервер (на 8080) обслуживает запросы для mydomain.com (по виртуальному хосту)
+print_header "Testing Server on 127.0.0.1:8080 (server_name: mydomain.com, root: www/site2)"
+
 test_get "http://127.0.0.1:8080/" "mydomain.com" 200 "Site2 index on mydomain.com"
+test_get "http://127.0.0.1:8080/secret" "mydomain.com" 200 "Site2 secret on mydomain.com"
 
-echo ""
-echo "=== Testing POST /uploads with chunked encoding (max_body_size 200k) ==="
-# Для тестирования POST /post_body используем файл, размер которого меньше лимита
+print_header "Testing POST /uploads with chunked encoding (max_body_size from location)"
+
+# For /uploads on server on 8080 (server_name: localhost) max_body_size is set to 200 (bytes)
 head -c 100 /dev/urandom > small_body.txt
-test_post_chunked "http://127.0.0.1:8080/uploads" "" "small_body.txt" 201 "POST /uploads within limit"
-# Теперь тест, когда размер тела превышает лимит. Допустим, лимит в конфиге для /post_body = 200k, 
-# но вы можете изменить тест, если хотите проверить поведение при превышении лимита.
-# Здесь для примера отправляем 300k:
+test_post_chunked "http://127.0.0.1:8080/uploads" "localhost" "small_body.txt" 201 "POST /uploads within limit (chunked)"
 head -c 900 /dev/urandom > large_body.txt
-test_post_chunked "http://127.0.0.1:8080/uploads" "" "large_body.txt" 413 "POST /uploads exceeding limit"
+test_post_chunked "http://127.0.0.1:8080/uploads" "localhost" "large_body.txt" 413 "POST /uploads exceeding limit (chunked)"
 rm -f small_body.txt large_body.txt
 
-echo ""
-echo "All tests completed."
+print_header "All tests completed"

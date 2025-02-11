@@ -1,6 +1,5 @@
 #include "Responder.hpp"
 #include "AutoIndex.cpp"
-#include "Outils.cpp"
 #include <sstream>
 #include <fstream>
 #include <algorithm>
@@ -10,8 +9,15 @@
 #include <cstdlib>
 #include <cstring>
 #include <sys/wait.h>
+#include <sstream>
+#include <string>
+#include <algorithm>
+#include <cctype>
+#include <iostream>
 
-Responder::Responder() {};
+Responder::Responder() {
+    Outils outils;
+};
 Responder::~Responder() {};
 std::map<std::string, std::string> Responder::g_sessions;
 
@@ -37,7 +43,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
             cookieStr = headers["cookie"];
         }
         // parse
-        cookies = parseCookieString(cookieStr);
+        cookies = outils.parseCookieString(cookieStr);
     }
 
     // 0.1) Check if we have session_id
@@ -45,7 +51,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
     {
         // not found => generate
 		needSetCookie = true;
-        newSid = generateRandomSessionID();
+        newSid = outils.generateRandomSessionID();
         // store in global map 
         this->g_sessions[newSid] = "Some user data or empty string";
         // (optional) we can do a debug print
@@ -70,6 +76,8 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
     else 
         max_body_size = loc->max_body_size;
     
+
+
     if (max_body_size > 0 && parser.getBody().size() > max_body_size)
     {
         return this->makeErrorResponse(413, "Request Entity Too Large", server, "Request Entity Too Large\n");
@@ -78,7 +86,6 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
 
     // 2) Check if method is allowed
     HttpMethod method = parser.getMethod();
-    std::cout << "Method: " << method << std::endl;
     std::string allowHeader;
     if (!isMethodAllowed(method, server, loc, allowHeader))
         return this->makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed\n");
@@ -139,7 +146,7 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
 
     // Первый проход: ищем location с заданным CGI-расширением,
     // и проверяем, что разрешён данный метод (если список методов не пуст)
-    std::string ext = extractExtention(path);
+    std::string ext = outils.extractExtention(path);
     for (size_t i = 0; i < srv.locations.size(); i++)
     {
         if (!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
@@ -457,7 +464,6 @@ HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &
 	}
 	else
 	{
-		std::cout << "File not found: " << realFilePath << std::endl;
 		return makeErrorResponse(404, "Not Found", server, "File Not Found\n");
 	}
 	return resp;
@@ -472,43 +478,73 @@ HttpResponse Responder::handleGet(const ServerConfig &server, const HttpParser &
 
 HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath)
 {
-	// Check if CGI
-	if (loc && !loc->cgi_pass.empty())
-	{
-		// Possibly check extension, or just do it:
-		return handleCgi(server, parser, loc, reqPath);
-	}
+    // Если есть CGI-передача, вызываем её:
+    if (loc && !loc->cgi_pass.empty())
+    {
+        return handleCgi(server, parser, loc, reqPath);
+    }
 
-	HttpResponse resp;
-	// If there's an upload store => save body as a file
-	std::cout << loc->upload_store << std::endl;
-	if (!loc || loc->upload_store.empty())
-	{
-		resp.setStatus(403, "Forbidden");
-		resp.setBody("Upload not allowed\n");
-		return resp;
-	}
+    HttpResponse resp;
 
-	std::string filename = extractFilename(reqPath);
-	std::string fullUpload = loc->upload_store;
-	if (!fullUpload.empty() && fullUpload[fullUpload.size() - 1] != '/')
-		fullUpload += "/";
-	fullUpload += filename;
+    // Если для загрузок разрешено upload_store, проверяем его
+    if (!loc || loc->upload_store.empty())
+    {
+        resp.setStatus(403, "Forbidden");
+        resp.setBody("Upload not allowed\n");
+        return resp;
+    }
 
-	std::ofstream ofs(fullUpload.c_str(), std::ios::binary);
-	if (!ofs.is_open())
-	{
-		resp.setStatus(500, "Internal Server Error");
-		resp.setBody("Cannot open file for writing\n");
-		return resp;
-	}
-	ofs << parser.getBody();
-	ofs.close();
+    // Проверяем Content-Type запроса
+    std::string contentType = parser.getHeader("Content-Type");
+    std::string fileData;
+    std::string fileFieldName;
+    std::string filename;
+    bool isMultipart = (contentType.find("multipart/form-data") != std::string::npos);
 
-	resp.setStatus(201, "Created");
-	resp.setHeader("Content-Type", "text/plain");
-	resp.setBody("File uploaded successfully\n");
-	return resp;
+    if (isMultipart)
+    {
+        // Разбор multipart/form-data
+        if (!parseMultipartFormData(contentType, parser.getBody(), fileFieldName, filename, fileData))
+        {
+            resp.setStatus(400, "Bad Request");
+            resp.setBody("Failed to parse multipart form data\n");
+            return resp;
+        }
+    }
+    else
+    {
+        // Если не multipart, просто берём тело запроса
+        fileData = parser.getBody();
+        // В этом случае можно извлечь имя файла из URL (например, через extractFilename)
+        filename = extractFilename(reqPath);
+    }
+
+    // Если filename пустой, можно задать дефолтное имя
+    if (filename.empty())
+    {
+        filename = "upload.dat";
+    }
+
+    // Формируем полный путь для сохранения файла:
+    std::string fullUpload = loc->upload_store;
+    if (!fullUpload.empty() && fullUpload[fullUpload.size() - 1] != '/')
+        fullUpload += "/";
+    fullUpload += filename;
+
+    std::ofstream ofs(fullUpload.c_str(), std::ios::binary);
+    if (!ofs.is_open())
+    {
+        resp.setStatus(500, "Internal Server Error");
+        resp.setBody("Cannot open file for writing\n");
+        return resp;
+    }
+    ofs << fileData;
+    ofs.close();
+
+    resp.setStatus(201, "Created");
+    resp.setHeader("Content-Type", "text/plain");
+    resp.setBody("File uploaded successfully\n");
+    return resp;
 }
 
 HttpResponse Responder::handleDelete(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath)
@@ -674,7 +710,6 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
         }
         // Вызовем функцию для обработки вывода дочернего процесса
         HttpResponse response = processCgiOutput(pipeOut[0], pid);
-        std::cout << "CGI response: " << response.toString() << std::endl;
         return response;
     }
 
@@ -783,4 +818,122 @@ HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
     resp.setHeader("Content-Length", oss.str());
 
     return resp;
+}
+
+
+
+
+
+bool Responder::parseMultipartFormData(const std::string &contentType,
+                            const std::string &body,
+                            std::string &fileFieldName,
+                            std::string &filename,
+                            std::string &fileContent)
+{
+    // Извлекаем boundary из Content-Type.
+    // Ожидаемый формат: "multipart/form-data; boundary=----WebKitFormBoundaryAQRTcpQXQ6fB9YDJ"
+    size_t pos = contentType.find("boundary=");
+    if (pos == std::string::npos) {
+        std::cerr << "No boundary found in Content-Type header" << std::endl;
+        return false;
+    }
+    std::string boundary = contentType.substr(pos + 9);
+    boundary = outils.trim(boundary);
+    // Если boundary заключён в кавычки, удалим их
+    if (!boundary.empty() && boundary[0]=='"') {
+        boundary.erase(0,1);
+        if (!boundary.empty() && boundary[boundary.size()-1]=='"')
+            boundary.erase(boundary.size()-1);
+    }
+    // Полная граница в теле начинается с двух дефисов:
+    std::string fullBoundary = "--" + boundary;
+    // Конечная граница завершается "--"
+    std::string closingBoundary = fullBoundary + "--";
+
+    // Используем istringstream для разбора тела запроса.
+    std::istringstream iss(body);
+    std::string line;
+    bool inPart = false;
+    bool headersParsed = false;
+    std::string partHeaders;
+    std::string partBody;
+    bool filePartFound = false;
+    
+    while (std::getline(iss, line)) {
+        // Удаляем завершающие символы \r
+        if (!line.empty() && line[line.size()-1] == '\r')
+            line.erase(line.size()-1);
+
+        // Если строка равна fullBoundary или closingBoundary, то это граница между частями.
+        if (line == fullBoundary || line == closingBoundary) {
+            // Если уже собирали одну часть и нашли пустую строку в заголовках – значит, часть завершена.
+            if (inPart && headersParsed) {
+                // Если в partHeaders содержится Content-Disposition с параметром filename, то это наш файл.
+                size_t cdPos = partHeaders.find("Content-Disposition:");
+                if (cdPos != std::string::npos) {
+                    // Пример строки:
+                    // Content-Disposition: form-data; name="myfile"; filename="test.txt"
+                    std::istringstream headerStream(partHeaders);
+                    std::string headerLine;
+                    while (std::getline(headerStream, headerLine, ';')) {
+                        headerLine = outils.trim(headerLine);
+                        if (headerLine.find("name=") != std::string::npos) {
+                            size_t posQuote = headerLine.find('"');
+                            if (posQuote != std::string::npos) {
+                                size_t posQuote2 = headerLine.find('"', posQuote+1);
+                                if (posQuote2 != std::string::npos) {
+                                    fileFieldName = headerLine.substr(posQuote+1, posQuote2-posQuote-1);
+                                }
+                            }
+                        }
+                        if (headerLine.find("filename=") != std::string::npos) {
+                            size_t posQuote = headerLine.find('"');
+                            if (posQuote != std::string::npos) {
+                                size_t posQuote2 = headerLine.find('"', posQuote+1);
+                                if (posQuote2 != std::string::npos) {
+                                    filename = headerLine.substr(posQuote+1, posQuote2-posQuote-1);
+                                }
+                            }
+                        }
+                    }
+                    // Если параметр filename найден, считаем, что это часть с файлом.
+                    if (!filename.empty()) {
+                        fileContent = partBody;
+                        filePartFound = true;
+                        break;  // завершаем разбор
+                    }
+                }
+            }
+            // Начинается новая часть. Обнуляем переменные.
+            inPart = true;
+            headersParsed = false;
+            partHeaders = "";
+            partBody = "";
+            continue;
+        }
+
+        // Если мы находимся внутри части
+        if (inPart) {
+            // Если заголовки еще не закончили – ищем пустую строку.
+            if (!headersParsed) {
+                if (line == "") {
+                    // пустая строка – конец заголовков, теперь начинается тело части
+                    headersParsed = true;
+                } else {
+                    partHeaders += line + "\r\n";
+                }
+            } else {
+                // Собираем тело части. Добавляем перевод строки обратно, если нужно.
+                partBody += line + "\n";
+            }
+        }
+    }
+
+    if (filePartFound) {
+        // Удаляем завершающие переводы строк из fileContent
+        fileContent = outils.trim(fileContent);
+        return true;
+    } else {
+        return false;
+    }
 }

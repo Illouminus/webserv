@@ -11,6 +11,7 @@
 #include "HttpParser.hpp"
 #include "HttpResponse.hpp"
 #include "ServerConfig.hpp"
+#include "Outils.hpp"
 
 class Responder
 {
@@ -27,6 +28,7 @@ public:
 	HttpResponse makeErrorResponse(int code, const std::string &reason,
 											 const ServerConfig &server,
 											 const std::string &defaultMessage);
+	Outils outils;
 
 private:
 	
@@ -59,4 +61,11 @@ private:
 								  const std::string &reqPath);
 
 	HttpResponse processCgiOutput(int pipeFd, pid_t childPid);
+
+
+	bool parseMultipartFormData(const std::string &contentType,
+                            const std::string &body,
+                            std::string &fileFieldName,
+                            std::string &filename,
+                            std::string &fileContent);
 };

@@ -28,19 +28,25 @@ HttpParser::~HttpParser() {}
 
 HttpParser &HttpParser::operator=(const HttpParser &other)
 {
-	if (this != &other)
-	{
-		_buffer = other._buffer;
-		_status = other._status;
-		_method = other._method;
-		_path = other._path;
-		_version = other._version;
-		_headers = other._headers;
-		_body = other._body;
-		_contentLength = other._contentLength;
-		_headerParsed = other._headerParsed;
-	}
-	return *this;
+    if (this != &other)
+    {
+        _buffer = other._buffer;
+        _status = other._status;
+        _method = other._method;
+        _path = other._path;
+        _version = other._version;
+        _headers = other._headers;
+        _body = other._body;
+        _contentLength = other._contentLength;
+        _headerParsed = other._headerParsed;
+        _headersDone = other._headersDone;
+        _errorCode = other._errorCode;
+        _maxBodySize = other._maxBodySize;
+        _query = other._query;
+        _serverSelected = other._serverSelected;
+        _chosenServer = other._chosenServer; 
+    }
+    return *this;
 }
 
 bool HttpParser::isComplete() const {
@@ -323,7 +329,6 @@ void HttpParser::parseHeaderLine(const std::string &line)
 	// To lowercase
 	std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
-    std::cout << "Header: " << key << " = " << value << std::endl;
 	_headers[key] = value;
 }
 
@@ -399,20 +404,17 @@ void HttpParser::parseChunkedBody() {
 
         // 2) Извлекаем строку с размером чанка
         std::string hexLen = _buffer.substr(0, posRN);
-        std::cout << "Chunk size: " << hexLen << std::endl;
         _buffer.erase(0, posRN + 2); // удаляем размер и "\r\n"
 
         // 3) Преобразуем строку в число
         long chunkSize = parseHexNumber(hexLen);
         if (chunkSize == -2) {
             // Переполнение – число слишком большое
-            std::cout << "Chunk size too large (overflow)" << std::endl;
             _status = PARSING_ERROR;
             _errorCode = ERR_413;  // Request Entity Too Large
             return;
         }
         if (chunkSize < 0) {
-            std::cout << "Error parsing chunk size" << std::endl;
             _status = PARSING_ERROR;
             _errorCode = ERR_400;  // Bad Request
             return;
@@ -451,7 +453,7 @@ void HttpParser::parseChunkedBody() {
         // 8) Добавляем данные чанка к телу
         _body += chunkData;
 
-        if (_maxBodySize > 0 && _body.size() > _maxBodySize) {
+        if (_maxBodySize && _maxBodySize > 0 && _body.size() > _maxBodySize) {
             _status = PARSING_ERROR;
             _errorCode = ERR_413;
             return;

@@ -24,33 +24,35 @@
 class WebServ
 {
 public:
-	WebServ(const std::vector<ServerConfig> &configs);
-	WebServ(const WebServ &other);
-	WebServ &operator=(const WebServ &other);
-	~WebServ();
+    WebServ(const std::vector<ServerConfig> &configs);
+    WebServ(const WebServ &other);
+    WebServ &operator=(const WebServ &other);
+    ~WebServ();
 
-	void start();
-	void getListenSockets();
+    void start();
+    void getListenSockets();
 
 private:
-	std::vector<ServerConfig> _servers;
-	std::vector<int> _listenSockets;
-	std::map<int, HttpParser> _parsers;
-	std::map<int, size_t> _listenSockettoServerIndex;
-	std::map<int, size_t> _clientToServerIndex;
-	std::map<int, std::string> _writeBuffers;
-	std::map<int, time_t> _lastActivity;
-	std::map< std::pair<std::string,int>, std::vector<ServerConfig> > serverGroups;
-	std::map<int, std::vector<ServerConfig> > _serversForSocket;
-	std::map<int, const std::vector<ServerConfig>*> _clientToServers;
-	int _epoll_fd;
+    std::vector<ServerConfig> _servers;
+    std::vector<int> _listenSockets;
+    std::map<int, HttpParser> _parsers;
+    std::map<int, size_t> _listenSockettoServerIndex;
+    std::map<int, size_t> _clientToServerIndex;
+    std::map<int, std::string> _writeBuffers;
+    std::map<int, time_t> _lastActivity;
+    std::map< std::pair<std::string,int>, std::vector<ServerConfig> > serverGroups;
+    std::map<int, std::vector<ServerConfig> > _serversForSocket;
+    std::map<int, const std::vector<ServerConfig>*> _clientToServers;
+    int _epoll_fd;
 
-	void initSockets();
-	void mainLoop();
-	void acceptNewConnection(int listen_fd);
-	void handleClientRead(int fd, Responder &responder);
-	void handleClientWrite(int fd);
-	void closeClient(int fd);
-	void checkTimeouts();
-	const ServerConfig &chooseServer(const std::vector<ServerConfig> &serversVec, const std::string &hostName);
+    void initSockets();
+    void mainLoop();
+    void acceptNewConnection(int listen_fd);
+    void handleClientRead(int fd, Responder &responder);
+    void handleClientWrite(int fd);
+    void closeClient(int fd);
+    void checkTimeouts();
+    const ServerConfig &chooseServer(const std::vector<ServerConfig> &serversVec, const std::string &hostName);
 };
+
+std::string extractHostWithoutPort(const std::string &host);

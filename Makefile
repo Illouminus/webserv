@@ -10,10 +10,11 @@ SRCS = main.cpp \
        src/parsing/Parser.cpp \
        src/parsing/LocationConfig.cpp \
        src/parsing/ServerConfig.cpp \
-		 src/WebServ.cpp \
+	     src/WebServ.cpp \
 		 src/parsing/HttpParser.cpp \
 		 src/HttpResponse.cpp \
-		 src/Responder.cpp
+		 src/Responder.cpp \
+		 src/Outils.cpp
 
 OBJS = $(SRCS:%.cpp=$(OBJDIR)/%.o)
 
