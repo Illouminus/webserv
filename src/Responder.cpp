@@ -67,6 +67,7 @@ HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConf
     std::string path = parser.getPath();
 
 	const LocationConfig *loc = findLocation(server, parser);
+
     size_t max_body_size;
     // check if body size is too big
 
@@ -147,7 +148,10 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
     // Первый проход: ищем location с заданным CGI-расширением,
     // и проверяем, что разрешён данный метод (если список методов не пуст)
     std::string ext = outils.extractExtention(path);
-    for (size_t i = 0; i < srv.locations.size(); i++)
+
+    if(!ext.empty())
+    {
+            for (size_t i = 0; i < srv.locations.size(); i++)
     {
         if (!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
         {
@@ -172,6 +176,7 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
             // Нашли подходящую CGI-локацию
             return &srv.locations[i];
         }
+    }
     }
 
     // Если подходящая CGI-локация не найдена,
@@ -486,13 +491,30 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
 
     HttpResponse resp;
 
-    // Если для загрузок разрешено upload_store, проверяем его
+
+    std::string dirPath = loc->upload_store;
+            
+    if (!dirPath.empty() && dirPath[dirPath.size() - 1] != '/')
+        dirPath += "/";
+
+    struct stat dirStat;
+    if (stat(dirPath.c_str(), &dirStat) != 0 || !S_ISDIR(dirStat.st_mode))
+    {
+        return makeErrorResponse(404, "Not Found", server, "Upload directory not found\n");
+    }
+    
+
     if (!loc || loc->upload_store.empty())
     {
+        
         resp.setStatus(403, "Forbidden");
         resp.setBody("Upload not allowed\n");
         return resp;
     }
+
+    
+
+
 
     // Проверяем Content-Type запроса
     std::string contentType = parser.getHeader("Content-Type");

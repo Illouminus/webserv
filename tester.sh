@@ -135,7 +135,20 @@ test_get "http://127.0.0.1:8080/oldpath" "localhost" 301 "Old path redirect"
 echo "Test file content for upload" > upload_test.txt
 test_post "http://127.0.0.1:8080/uploads/upload_test.txt" "localhost" "$(cat upload_test.txt)" 201 "File upload to /uploads (non-chunked)"
 test_delete "http://127.0.0.1:8080/uploads/upload_test.txt" "localhost" 200 "File deletion from /uploads"
+# Test: DELETE already deleted file (should return 404)
+test_delete "http://127.0.0.1:8080/uploads/upload_test.txt" "localhost" 404 "Deleting non-existent file"
 rm -f upload_test.txt
+
+# Test: POST with body size exceeding limit (non-chunked)
+# /uploads on site1 has max_body_size set to 200 bytes.
+long_data=$(head -c 300 /dev/urandom | base64)
+test_post "http://127.0.0.1:8080/uploads/exceed.txt" "localhost" "$long_data" 413 "POST with body exceeding max_body_size (non-chunked)"
+
+# Test: POST to a non-existent directory (should result in error, e.g., 404)
+test_post "http://127.0.0.1:8080/nonexistent" "localhost" "data=test" 404 "POST to non-existent directory"
+
+# Test: GET non-existent file (should return 404)
+test_get "http://127.0.0.1:8080/nonexistent.txt" "localhost" 404 "GET non-existent file"
 
 print_header "Testing Server on 127.0.0.1:8081 (server_name: localhost, root: www/site2)"
 

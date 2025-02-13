@@ -5,18 +5,15 @@
 #include <cstdlib>
 #include <signal.h>
 
-// Глобальный флаг для корректного завершения работы
 volatile sig_atomic_t stop_flag = 0;
 
-// Обработчик сигнала SIGINT (Ctrl+C)
 void handle_sigint(int signum) {
-    (void)signum;  // подавление предупреждения о неиспользуемом параметре
+    (void)signum;  
     stop_flag = 1;
 }
 
 int main(int argc, char *argv[])
 {
-    // Установка обработчика сигнала SIGINT для корректного завершения работы
     struct sigaction sa;
     sa.sa_handler = handle_sigint;
     sigemptyset(&sa.sa_mask);
@@ -24,7 +21,7 @@ int main(int argc, char *argv[])
     sigaction(SIGINT, &sa, NULL);
 
     Parser p;
-	Outils outils;
+	//Outils outils;
     std::string configFile = "config/config.conf";
 
     if (argc > 1)
@@ -34,7 +31,7 @@ int main(int argc, char *argv[])
     {
         p.parseConfig(configFile);
         WebServ ws(p.getServers());
-		outils.printConf(p.getServers());
+		//outils.printConf(p.getServers());
         ws.start();
     }
     catch (std::exception &e)
