@@ -148,7 +148,7 @@ print_header "Testing Server on 127.0.0.1:8080 (server_name: localhost, root: ww
 # GET tests
 test_get "http://127.0.0.1:8080/" "localhost" 200 "Site1 index"
 test_get "http://127.0.0.1:8080/ajax" "localhost" 200 "Site1 ajax index"
-test_get "http://127.0.0.1:8080/images" "localhost" 200 "Site1 images autoindex"
+test_get "http://127.0.0.1:8080/uploads" "localhost" 200 "Site1 uploads autoindex"
 test_get "http://127.0.0.1:8080/oldpath" "localhost" 301 "Old path redirect"
 
 
@@ -166,7 +166,7 @@ rm -f upload_test.txt
 
 # Test: POST with body size exceeding limit (non-chunked)
 # /uploads on site1 has max_body_size set to 200 bytes.
-long_data=$(head -c 300 /dev/urandom | base64)
+long_data=$(head -c 900 /dev/urandom | base64)
 test_post "http://127.0.0.1:8080/uploads/exceed.txt" "localhost" "$long_data" 413 "POST with body exceeding max_body_size (non-chunked)"
 
 # Test: POST to a non-existent directory (should result in error, e.g., 404)
