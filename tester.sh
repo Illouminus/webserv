@@ -43,6 +43,26 @@ function test_get() {
     fi
 }
 
+
+function test_unknow() {
+    url="$1"
+    host="$2"
+    expected="$3"
+    desc="$4"
+    echo -e "${YELLOW}UNKNOW${NC} $url [$desc]: "
+    if [ -n "$host" ]; then
+        code=$(curl -s -H "Host: $host" -X UNKNOW -H "Connection: close" -o /dev/null -w "%{http_code}" "$url")
+    else
+        code=$(curl -s -H "Connection: close" -X UNKNOW -o /dev/null -w "%{http_code}" "$url")
+    fi
+    if [ "$code" -eq "$expected" ]; then
+        echo -e "${GREEN}${CHECK_MARK} SUCCESS${NC} (status: $code)"
+    else
+        echo -e "${RED}${CROSS_MARK} FAIL${NC} (status: $code, expected: $expected)"
+    fi
+}
+
+
 # Function to test POST requests (non-chunked).
 # Arguments:
 #   $1 - URL
@@ -130,6 +150,11 @@ test_get "http://127.0.0.1:8080/" "localhost" 200 "Site1 index"
 test_get "http://127.0.0.1:8080/ajax" "localhost" 200 "Site1 ajax index"
 test_get "http://127.0.0.1:8080/images" "localhost" 200 "Site1 images autoindex"
 test_get "http://127.0.0.1:8080/oldpath" "localhost" 301 "Old path redirect"
+
+
+# UNKNOW tests
+
+test_unknow "http://127.0.01:8080/" "localhost" 405 "Site1 index"
 
 # POST/DELETE tests (uploads)
 echo "Test file content for upload" > upload_test.txt

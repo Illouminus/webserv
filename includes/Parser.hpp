@@ -30,6 +30,7 @@ private:
 	void expectToken(const std::string &expected);
 
 	void parseServers();
+	void checkUniqueListen();
 	void parseServerBlock(ServerConfig &srv);
 	void parseLocationBlock(ServerConfig &srv);
 	void parseServerDirective(ServerConfig &srv, const std::string &directive);

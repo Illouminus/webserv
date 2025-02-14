@@ -23,6 +23,22 @@ const std::vector<ServerConfig> &Parser::getServers() const
 	return servers;
 }
 
+void Parser::checkUniqueListen()
+{
+	for (size_t i = 0; i < servers.size(); i++)
+	{
+		for (size_t j = i + 1; j < servers.size(); j++)
+		{
+			if (servers[i].host == servers[j].host && servers[i].port == servers[j].port && servers[i].server_name == servers[j].server_name)
+			{
+				throw std::runtime_error("Duplicate listen: " + servers[i].host + ":" + servers[i].server_name);
+			}
+		}
+	}
+}
+
+
+
 void Parser::parseConfig(const std::string &filename)
 {
 	servers.clear();
@@ -38,6 +54,7 @@ void Parser::parseConfig(const std::string &filename)
 
 	tokenize(content);
 	parseServers();
+	checkUniqueListen();
 }
 
 void Parser::tokenize(const std::string &content)
