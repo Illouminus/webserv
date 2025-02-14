@@ -1,122 +1,285 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <title>WebServ Demo with Cat Cards</title>
-  <!-- Bootstrap CSS (CDN) -->
-  <link rel="stylesheet"
-        href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
-  
-  <style>
-    body {
-      padding-top: 2rem;
-    }
-    .card {
-      margin-bottom: 1rem;
-    }
-  </style>
-</head>
-<body>
+<!DOCTYPE HTML>
+<!--
+    Dimension by HTML5 UP
+    html5up.net | @ajlkn
+    Free for personal and commercial use under the CCA 3.0 license (html5up.net/license)
+-->
+<html>
+  <head>
+    <title>Dimension by HTML5 UP</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+      /* Styles for the modal window */
+      #modalOverlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0;
+        width: 100%; height: 100%;
+        background: rgba(0, 0, 0, 0.75);
+        z-index: 1000;
+      }
+      #modalContent {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: #948c8c;
+        padding: 20px;
+        max-width: 90%;
+        max-height: 80%;
+        overflow-y: auto;
+        border-radius: 4px;
+      }
+      #modalClose {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+        font-size: 1.5em;
+      }
+      /* Дополнительные отступы для навигации */
+      #header nav ul {
+        margin-bottom: 10px;
+      }
+    </style>
+  </head>
+  <body class="is-preload">
 
-<div class="container">
-  <h1 class="mb-4">WebServ Demo</h1>
-
-  <div class="row">
-    <!-- Card 1: GET Example -->
-    <div class="col-md-6">
-		<div class="card" style="width: 18rem;">
-			<img class="bd-placeholder-img card-img-top" width="100%" height="180" src="https://placekittens.com/g/293/180" role="img" />
-			<div class="card-body">
-			  <h5 class="card-title">GET Example</h5>
-			  <p class="card-text">
-				Send a GET request to <code>/hello</code>.
-			  </p>
-			  <a href="/hello" class="btn btn-primary">Send GET /hello</a>
-			</div>
-		  </div>
+    <!-- Modal for displaying response or forms -->
+    <div id="modalOverlay">
+      <div id="modalContent">
+        <span id="modalClose">&times;</span>
+        <div id="modalBody"></div>
+      </div>
     </div>
 
-    <!-- Card 2: POST Upload -->
-    <div class="col-md-6">
-      <div class="card" style="width: 18rem;">
-        <img src="https://placekittens.com/g/289/180" class="card-img-top" alt="Another cat">
-        <div class="card-body">
-          <h5 class="card-title">POST File Upload</h5>
-          <p class="card-text">
-            Use this form to upload a file via POST to <code>/uploads</code>.
-          </p>
-          <form action="/uploads" method="POST" enctype="multipart/form-data">
-            <div class="form-group">
-              <label for="fileInput">Choose a file:</label>
-              <input type="file" name="myfile" id="fileInput" class="form-control">
-            </div>
-            <button type="submit" class="btn btn-success">Upload</button>
+    <!-- Wrapper -->
+    <div id="wrapper">
+      <!-- Header -->
+      <header id="header">
+        <div class="logo">
+          <span class="icon fa-gem"></span>
+        </div>
+        <div class="content">
+          <div class="inner">
+            <h1>WebServ</h1>
+            <p>Demonstration website with some basic requests on port 8080</p>
+          </div>
+        </div>
+        <nav>
+          <ul>
+            <!-- Ссылки для отправки запросов -->
+            <li><a href="http://127.0.0.1:8080" class="ajax-link" data-method="GET">GET</a></li>
+            <li><a href="http://127.0.0.1:8080/uploads" class="ajax-link" data-method="POST">POST</a></li>
+            <li><a href="http://127.0.0.1:8080/uploads" class="ajax-link" data-method="DELETE">DELETE</a></li>
+            <li><a href="http://127.0.0.1:8080/unknow" class="ajax-link" data-method="UNKNOW">UNKNOW</a></li>
+            <li><a href="http://127.0.0.1:8080/uploads" class="ajax-link" data-method="GET">AUTOINDEX</a></li>
+            <li><a href="http://127.0.0.1:8080/cgi-bin/test.php" class="ajax-link" data-method="GET">PHP-CGI</a></li>
+            <li><a href="http://127.0.0.1:8080/cgi-bin/test.sh" class="ajax-link" data-method="GET">SH-CGI</a></li>
+          </ul>
+        </nav>
+      </header>
+
+      <!-- Main content -->
+      <div id="main">
+        <!-- Intro -->
+        <article id="intro">
+          <h2 class="major">Intro</h2>
+          <span class="image main"><img src="images/pic01.jpg" alt="" /></span>
+          <p>Click on any link above to send a request. The response will be shown in the modal window.</p>
+        </article>
+        <!-- Остальные разделы остаются без изменений... -->
+      </div>
+
+      <!-- Footer -->
+      <footer id="footer">
+        <p class="copyright">&copy; Untitled. Design: <a href="https://html5up.net">HTML5 UP</a>.</p>
+      </footer>
+    </div>
+
+    <!-- BG -->
+    <div id="bg"></div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script>
+      // Функция для показа модального окна с указанным содержимым
+      function showModal(content) {
+        $('#modalBody').html(content);
+        $('#modalOverlay').fadeIn();
+      }
+
+      // Функция для скрытия модального окна
+      function hideModal() {
+        $('#modalOverlay').fadeOut();
+      }
+
+      // Функция для создания формы загрузки файла (POST)
+      function createPostForm(url) {
+        return `
+          <form id="uploadForm">
+            <label>Select file to upload:</label><br/>
+            <input type="file" id="uploadFile" name="uploadFile"/><br/><br/>
+            <button type="submit">Upload</button>
           </form>
-        </div>
-      </div>
-    </div>
-  </div><!-- row -->
+          <div id="uploadResult"></div>
+        `;
+      }
 
-  <div class="row">
-    <!-- Card 3: DELETE Example -->
-    <div class="col-md-6">
-      <div class="card" style="width: 18rem;">
-        <img src="https://placekittens.com/g/298/180" class="card-img-top" alt="Another cat">
-        <div class="card-body">
-          <h5 class="card-title">DELETE Example</h5>
-          <p class="card-text">
-            Send DELETE request to remove <code>/uploads/test.txt</code>.
-          </p>
-          <button class="btn btn-danger" id="btnDelete">DELETE /uploads/test.txt</button>
-          <div id="deleteResult" class="mt-2"></div>
-        </div>
-      </div>
-    </div>
+      // Функция для создания формы удаления файла (DELETE)
+      // Здесь делается запрос к /uploads, и, предположим, что сервер возвращает HTML с перечнем файлов.
+      // В реальном проекте нужно написать более надёжный парсер.
+      function createDeleteForm(fileListHtml, baseUrl) {
+        // Простой способ: находим все ссылки вида <a href="..."> и извлекаем атрибут href
+        var fileNames = [];
+        $(fileListHtml).find('a').each(function(){
+          var href = $(this).attr('href');
+          // Пропускаем вложенные папки, если нужно
+          if (href && href.indexOf('/uploads/') === 0) {
+              var fileName = href.substring(8);
+              fileNames.push(fileName);
+          }
 
-    <!-- Card 4: CGI Example -->
-    <div class="col-md-6">
-      <div class="card" style="width: 18rem;">
-        <img src="https://placekittens.com/g/292/180" class="card-img-top" alt="Another cat">
-        <div class="card-body">
-          <h5 class="card-title">CGI Example</h5>
-          <p class="card-text">
-            If configured, click below to run PHP or Shell CGI scripts.
-          </p>
-          <a href="/cgi-bin/test.php" class="btn btn-info mb-1">Run CGI (PHP)</a>
-          <a href="/cgi-bin/test.sh" class="btn btn-secondary">Run CGI (Shell)</a>
-        </div>
-      </div>
-    </div>
-  </div><!-- row -->
-</div><!-- container -->
+        });
+        if (fileNames.length === 0) {
+          return "<p>No files available for deletion.</p>";
+        }
+        var options = fileNames.map(function(name) {
+          return `<option value="${name}">${name}</option>`;
+        }).join('');
+        return `
+          <form id="deleteForm">
+            <label>Select file to delete:</label><br/>
+            <select id="deleteSelect">${options}</select><br/><br/>
+            <button type="submit">Delete</button>
+          </form>
+          <div id="deleteResult"></div>
+        `;
+      }
 
-<!-- Bootstrap + jQuery JS -->
-<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
-<script 
-  src="https://cdn.jsdelivr.net/npm/bootstrap@4.5.2/dist/js/bootstrap.bundle.min.js">
-</script>
+      $(document).ready(function(){
+        // Обработка клика по ссылкам с классом .ajax-link
+        $('.ajax-link').on('click', function(e){
+          e.preventDefault();
+          var url = $(this).attr('href');
+          var method = $(this).data('method');
+          // Сбрасываем содержимое модального окна
+          $('#modalBody').empty();
 
-<script>
-document.addEventListener("DOMContentLoaded", function() {
+          if(method === 'GET' || method === 'UNKNOW'){
+            // Отправляем обычный GET-запрос
+            $.ajax({
+              url: url,
+              method: method,
+              headers: { "Connection": "close" },
+              success: function(response){
+                showModal(response);
+              },
+              error: function(jqXHR, textStatus, errorThrown){
+                showModal('<p>Error: ' + errorThrown + '</p>');
+              }
+            });
+          }
+          else if(method === 'POST'){
+            // Показываем форму для загрузки файла
+            showModal(createPostForm(url));
+            // Обработчик отправки формы
+            $('#uploadForm').on('submit', function(ev){
+              ev.preventDefault();
+              var fileInput = $('#uploadFile')[0];
+              if(fileInput.files.length === 0){
+                $('#uploadResult').html('<p>Please select a file.</p>');
+                return;
+              }
+              var formData = new FormData();
+              formData.append('uploadFile', fileInput.files[0]);
+              $.ajax({
+                url: url,
+                method: 'POST',
+                data: formData,
+                processData: false,
+                contentType: false,
+                headers: { "Connection": "close" },
+                success: function(response){
+                  $('#uploadResult').html('<p>Upload successful!</p><pre>' + response + '</pre>');
+                },
+                error: function(jqXHR, textStatus, errorThrown){
+                  $('#uploadResult').html('<p>Error: ' + errorThrown + '</p>');
+                }
+              });
+            });
+          }
+          else if(method === 'DELETE'){
+            // Сначала делаем GET-запрос к uploads, чтобы получить список файлов
+            $.ajax({
+              url: url,
+              method: 'GET',
+              headers: { "Connection": "close" },
+              success: function(response){
+                // Создаём форму для удаления файла, передавая полученный HTML и базовый URL
+                var formHtml = createDeleteForm(response, url);
+                showModal(formHtml);
+                // Обработчик отправки формы удаления
+                $('#deleteForm').on('submit', function(ev){
+                  ev.preventDefault();
+                  var selectedFile = $('#deleteSelect').val();
+                  // Формируем URL для удаления файла
+                  var deleteUrl = url;
+                  if(deleteUrl[deleteUrl.length - 1] !== '/')
+                    deleteUrl += '/';
+                  deleteUrl += selectedFile;
+                  $.ajax({
+                    url: deleteUrl,
+                    method: 'DELETE',
+                    headers: { "Connection": "close" },
+                    success: function(delResponse){
+                      $('#deleteResult').html('<p>Deletion successful!</p><pre>' + delResponse + '</pre>');
+                    },
+                    error: function(jqXHR, textStatus, errorThrown){
+                      $('#deleteResult').html('<p>Error: ' + errorThrown + '</p>');
+                    }
+                  });
+                });
+              },
+              error: function(jqXHR, textStatus, errorThrown){
+                showModal('<p>Error fetching file list: ' + errorThrown + '</p>');
+              }
+            });
+          }
+          else {
+            // Для остальных методов
+            $.ajax({
+              url: url,
+              method: method,
+              headers: { "Connection": "close" },
+              success: function(response){
+                showModal(response);
+              },
+              error: function(jqXHR, textStatus, errorThrown){
+                showModal('<p>Error: ' + errorThrown + '</p>');
+              }
+            });
+          }
+        });
 
-  var btnDelete = document.getElementById("btnDelete");
-  var deleteResult = document.getElementById("deleteResult");
-
-  btnDelete.addEventListener("click", function() {
-    fetch("/uploads/test.txt", {
-      method: "DELETE"
-    })
-    .then(response => response.text())
-    .then(text => {
-      deleteResult.innerHTML = "<pre>" + text + "</pre>";
-    })
-    .catch(err => {
-      deleteResult.innerHTML = "<pre>Error: " + err + "</pre>";
-    });
-  });
-
-});
-</script>
-
-</body>
+        // Закрытие модального окна по клику на крестик или по фону (если клик вне содержимого)
+        $('#modalClose, #modalOverlay').on('click', function(e){
+          if (e.target.id === 'modalOverlay' || e.target.id === 'modalClose') {
+            hideModal();
+          }
+        });
+        // Предотвращаем закрытие модального окна при клике по содержимому
+        $('#modalContent').on('click', function(e){
+          e.stopPropagation();
+        });
+      });
+    </script>
+  </body>
 </html>
