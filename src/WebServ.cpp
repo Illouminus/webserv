@@ -8,13 +8,12 @@
 #include <signal.h>
 
 
-// Объявляем глобальную переменную stop_flag, определённую в main.cpp
 extern volatile sig_atomic_t stop_flag;
 
 #define MAX_EVENTS 1000
 #define EPOLL_TIMEOUT 1000
 
-// Функция для извлечения имени хоста без порта
+
 std::string extractHostWithoutPort(const std::string &host)
 {
     size_t colonPos = host.find(':');
@@ -27,7 +26,6 @@ std::string extractHostWithoutPort(const std::string &host)
 
 WebServ::~WebServ()
 {
-    // Закрываем все сокеты прослушивания
     for (std::vector<int>::iterator it = _listenSockets.begin(); it != _listenSockets.end(); ++it)
     {
         close(*it);
@@ -44,7 +42,6 @@ const ServerConfig &WebServ::chooseServer(const std::vector<ServerConfig> &serve
                                             const std::string &hostName)
 {
     std::string host = hostName;
-    // Если в заголовке пришёл IP, сопоставляем его с "localhost"
     if (host == "127.0.0.1" || host == "0.0.0.0") {
         host = "localhost";
     }
@@ -56,7 +53,6 @@ const ServerConfig &WebServ::chooseServer(const std::vector<ServerConfig> &serve
         if (serversVec[i].server_name == host)
             return serversVec[i];
     }
-    // Если не найдено, возвращаем первый (дефолтный)
     return serversVec[0];
 }
 

@@ -25,12 +25,9 @@ class WebServ
 {
 public:
     WebServ(const std::vector<ServerConfig> &configs);
-    WebServ(const WebServ &other);
-    WebServ &operator=(const WebServ &other);
     ~WebServ();
 
     void start();
-    void getListenSockets();
 
 private:
     std::vector<ServerConfig> _servers;

@@ -5,7 +5,7 @@
 HttpResponse::HttpResponse()
 	 : _statusCode(200), _reasonPhrase("OK")
 {
-	// По умолчанию 200 OK, можно установить потом вручную
+	// Default 200 OK
 }
 
 HttpResponse::~HttpResponse() {}
@@ -26,15 +26,15 @@ bool HttpResponse::setBodyFromFile(const std::string &filePath)
 	std::ifstream ifs(filePath.c_str(), std::ios::binary);
 	if (!ifs.is_open())
 	{
-		// Ошибка открытия файла
+		// Error opening file
 		return false;
 	}
-	// Считываем весь файл в _body (для учебных целей)
+	// Read file into string
 	std::ostringstream oss;
 	oss << ifs.rdbuf();
 	_body = oss.str();
 
-	// Автоматически можем поставить Content-Length
+	// Auto set Content-Length
 	std::ostringstream cl;
 	cl << _body.size();
 	_headers["Content-Length"] = cl.str();
@@ -45,7 +45,7 @@ bool HttpResponse::setBodyFromFile(const std::string &filePath)
 void HttpResponse::setBody(const std::string &body)
 {
 	_body = body;
-	// Обновим Content-Length
+	// Auto set Content-Length
 	std::ostringstream oss;
 	oss << _body.size();
 	_headers["Content-Length"] = oss.str();
@@ -61,13 +61,12 @@ std::string HttpResponse::statusLine() const
 
 std::string HttpResponse::toString() const
 {
-	// 1) Статусная строка
+	// 1) Status line
 	std::ostringstream oss;
 	oss << statusLine();
 
-	// 2) Заголовки
-	// Если не установлен Content-Length и у нас есть body,
-	// желательно его проставить
+	// 2) Headers
+	// If content-length not set, calculate it from body
 	if (_headers.find("Content-Length") == _headers.end())
 	{
 		std::ostringstream tmp;
@@ -80,10 +79,10 @@ std::string HttpResponse::toString() const
 		oss << it->first << ": " << it->second << "\r\n";
 	}
 
-	// 3) Пустая строка
+	// 3) End of headers
 	oss << "\r\n";
 
-	// 4) Тело
+	// 4) Body
 	oss << _body;
 
 	return oss.str();

@@ -18,7 +18,7 @@ public:
 	std::string cgi_pass;
 	std::string cgi_extension;
 	std::string upload_store;
-	std::string redirect; // Например: "301 /newpath"
+	std::string redirect; 
 	size_t max_body_size;
 
 	void reset();

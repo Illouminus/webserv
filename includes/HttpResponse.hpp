@@ -20,10 +20,9 @@ public:
 	bool setBodyFromFile(const std::string &filePath);
 	void setBody(const std::string &body);
 
-	// Формирует строку с заголовками + телом
+	// Format response to string
 	std::string toString() const;
 
 private:
-	// Можно добавить вспомогательные методы, например, для формата
 	std::string statusLine() const;
 };

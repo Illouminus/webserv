@@ -29,39 +29,62 @@ std::map<std::string, std::string> Responder::g_sessions;
 HttpResponse Responder::handleRequest(const HttpParser &parser, const ServerConfig &server)
 {
     HttpResponse resp;
-	bool needSetCookie = false;
-	std::string cookieStr;
-	std::string newSid;
-	
-    // 0) (Optional) parse cookie
-    std::map<std::string, std::string> cookies;
-    {
-        // We look for the Cookie header
-        std::map<std::string, std::string> headers = parser.getHeaders(); 
-        // 'cookie' is lowercased in parseHeaderLine
-        if (headers.find("cookie") != headers.end()) {
-            cookieStr = headers["cookie"];
-        }
-        // parse
-        cookies = outils.parseCookieString(cookieStr);
-    }
+    bool needSetCookie = false;
+    std::string newSid;
 
-    // 0.1) Check if we have session_id
+    // 0) Get headers
+    std::map<std::string, std::string> headers = parser.getHeaders();
+
+    // 1) Parse cookies
+    std::string cookieStr;
+    if (headers.find("cookie") != headers.end()) {
+        cookieStr = headers["cookie"];
+    }
+    std::map<std::string, std::string> cookies = outils.parseCookieString(cookieStr);
+
+    // 2) Verify session
+    std::string sid;
     if (cookies.find("session_id") == cookies.end())
     {
-        // not found => generate
-		needSetCookie = true;
+        // No session cookie found - create a new session
+        needSetCookie = true;
         newSid = outils.generateRandomSessionID();
-        // store in global map 
-        this->g_sessions[newSid] = "Some user data or empty string";
-        // (optional) we can do a debug print
+        
     }
     else
     {
-        // We do have session_id
-        std::string sid = cookies["session_id"];
-        // if you want, check g_sessions[sid]
+        // Have a session cookie - (In real life and project - check if it's valid)
+        sid = cookies["session_id"];
+        const SessionData* sd = outils.getSessionData(sid);
+        if (sd)
+        {
+            // Console log
+            // std::cout << "[Session] Welcome back! Last IP: " << sd->ip
+            //           << ", last visit: " << ctime(&(sd->lastVisit)) 
+            //           << ", userAgent: " << sd->userAgent << std::endl;
+        }
+        else
+        {
+            // If we cleared the session data (in our next project / have to set expire time for session)
+            // Again if session is not valid (in our next project / have to set expire time for session)- create a new session
+            needSetCookie = true;
+            newSid = outils.generateRandomSessionID();
+        }
     }
+    std::string clientIP = parser.getClientIP();  
+    std::string userAgent;
+    if (headers.find("user-agent") != headers.end()) {
+        userAgent = headers["user-agent"];
+    }
+
+    if (needSetCookie)
+    {
+        sid = newSid;
+        resp.setHeader("Set-Cookie", "session_id=" + sid + "; Path=/; HttpOnly");
+    }
+
+    outils.storeSessionData(sid, clientIP, userAgent);
+
 
     // 1) Find matching location
     std::string path = parser.getPath();
@@ -134,7 +157,7 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
     std::string path = parser.getPath();
     HttpMethod method = parser.getMethod();
 
-    // Преобразуем enum метода в строку (например, "GET", "POST", "PUT", "DELETE")
+    // Translate HttpMethod enum to string
     std::string methodStr;
     switch (method)
     {
@@ -145,8 +168,7 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
         default:                 methodStr = "";
     }
 
-    // Первый проход: ищем location с заданным CGI-расширением,
-    // и проверяем, что разрешён данный метод (если список методов не пуст)
+    // First check if the path has an extension that matches a CGI location
     std::string ext = outils.extractExtention(path);
 
     if(!ext.empty())
@@ -155,7 +177,7 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
     {
         if (!srv.locations[i].cgi_extension.empty() && srv.locations[i].cgi_extension == ext)
         {
-            // Если в конфигурации location явно указаны разрешённые методы, проверяем их
+            // If location has methods, check if the method is allowed
             if (!srv.locations[i].methods.empty())
             {
                 bool allowed = false;
@@ -169,24 +191,22 @@ const LocationConfig *Responder::findLocation(const ServerConfig &srv, const Htt
                 }
                 if (!allowed)
                 {
-                    // Метод не разрешён для этой CGI-локации, пропускаем её
+                    // Method not allowed for this location
                     continue;
                 }
             }
-            // Нашли подходящую CGI-локацию
+            // Finally, return the CGI location
             return &srv.locations[i];
         }
     }
     }
 
-    // Если подходящая CGI-локация не найдена,
-    // выполняем стандартный перебор по префиксному совпадению.
+    // If no CGI location found, check the path prefix
     size_t bestMatch = 0;
     const LocationConfig *bestLoc = NULL;
     for (size_t i = 0; i < srv.locations.size(); i++)
     {
         const std::string &locPath = srv.locations[i].path;
-        // Если запрошенный путь начинается с locPath
         if (path.compare(0, locPath.size(), locPath) == 0)
         {
             if (locPath.size() > bestMatch)
@@ -512,11 +532,7 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
         return resp;
     }
 
-    
-
-
-
-    // Проверяем Content-Type запроса
+    // Parsing multipart/form-data
     std::string contentType = parser.getHeader("Content-Type");
     std::string fileData;
     std::string fileFieldName;
@@ -525,7 +541,7 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
 
     if (isMultipart)
     {
-        // Разбор multipart/form-data
+        // Parse multipart form data
         if (!parseMultipartFormData(contentType, parser.getBody(), fileFieldName, filename, fileData))
         {
             resp.setStatus(400, "Bad Request");
@@ -535,19 +551,19 @@ HttpResponse Responder::handlePost(const ServerConfig &server, const HttpParser 
     }
     else
     {
-        // Если не multipart, просто берём тело запроса
+        // If not multipart, the body is the file data
         fileData = parser.getBody();
-        // В этом случае можно извлечь имя файла из URL (например, через extractFilename)
+        // can extract filename from path
         filename = extractFilename(reqPath);
     }
 
-    // Если filename пустой, можно задать дефолтное имя
+    // If no filename, use a default:
     if (filename.empty())
     {
         filename = "upload.dat";
     }
 
-    // Формируем полный путь для сохранения файла:
+    // Form full path to store the file
     std::string fullUpload = loc->upload_store;
     if (!fullUpload.empty() && fullUpload[fullUpload.size() - 1] != '/')
         fullUpload += "/";
@@ -621,10 +637,10 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
                                   const LocationConfig *loc,
                                   const std::string &reqPath)
 {
-    // 1) Построение пути к скрипту
+    // 1) Build full path to the script
     std::string scriptPath = buildFilePath(server, loc, reqPath);
 
-    // 2) Определяем интерпретатор по настройкам из конфигурации
+    // 2) Choise CGI interpreter based on extension
     std::string cgiInterpreter;
     size_t dotPos = scriptPath.rfind('.');
     if (dotPos == std::string::npos) {
@@ -637,7 +653,7 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
         return makeErrorResponse(403, "Forbidden", server, "Unsupported CGI extension\n");
     }
 
-    // 3) Формирование переменных окружения (как раньше)
+    // 3) Create environment variables
     std::vector<std::string> envVec;
     {
         std::string methodStr;
@@ -664,20 +680,20 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
     envVec.push_back("GATEWAY_INTERFACE=CGI/1.1");
     envVec.push_back("REDIRECT_STATUS=200");
 
-    // 4) Преобразование в массив char*
+    // 4) Convert envVec to char* array
     std::vector<char *> envp;
     for (size_t i = 0; i < envVec.size(); i++) {
         envp.push_back(const_cast<char *>(envVec[i].c_str()));
     }
     envp.push_back(NULL);
 
-    // 5) Формируем аргументы для execve: [cgiInterpreter, scriptPath, NULL]
+    // 5) Form the argument list for execve
     std::vector<char *> args;
     args.push_back(const_cast<char *>(cgiInterpreter.c_str()));
     args.push_back(const_cast<char *>(scriptPath.c_str()));
     args.push_back(NULL);
 
-    // 6) Создаем каналы
+    // 6) Create pipes for communication with the CGI script
     int pipeOut[2];
     if (pipe(pipeOut) == -1) {
         return makeErrorResponse(500, "Internal Server Error", server, "Failed to create pipeOut\n");
@@ -704,8 +720,7 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
         return makeErrorResponse(500, "Internal Server Error", server, "Fork failed\n");
     }
     else if (pid == 0) {
-        // --- Дочерний процесс ---
-        // Перенаправляем STDOUT и STDERR в pipeOut[1]
+        // Child process - set up pipes and run the script
         dup2(pipeOut[1], STDOUT_FILENO);
         dup2(pipeOut[1], STDERR_FILENO);
         close(pipeOut[0]);
@@ -717,20 +732,20 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
             close(pipeIn[0]);
         }
 
-        // Запускаем CGI-скрипт
+        // Run the script
         execve(args[0], &args[0], &envp[0]);
-        // Если execve не сработало, завершаем с ошибкой
+        // If execve returns, it failed
         _exit(1);
     }
     else {
-        // --- Родительский процесс ---
-        close(pipeOut[1]);  // закрываем неиспользуемый конец для записи
+        // Parent process - close unused pipe ends
+        close(pipeOut[1]);  
         if (hasBody) {
             close(pipeIn[0]);
             write(pipeIn[1], parser.getBody().c_str(), parser.getBody().size());
             close(pipeIn[1]);
         }
-        // Вызовем функцию для обработки вывода дочернего процесса
+        // Function to read the output of the CGI script (if our script acctually writes something)
         HttpResponse response = processCgiOutput(pipeOut[0], pid);
         return response;
     }
@@ -741,7 +756,7 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
 
 HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
 {
-    // 1. Считываем весь вывод ребенка из pipeFd
+    // 1. Read the output of the CGI script
     std::ostringstream cgiOutput;
     char buf[1024];
     ssize_t bytesRead;
@@ -750,13 +765,12 @@ HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
     }
     close(pipeFd);
 
-    // 2. Ждем завершения дочернего процесса
+    // 2. Wait for the child process to finish
     int status;
     waitpid(childPid, &status, 0);
     std::string output = cgiOutput.str();
 
-    // Если процесс завершился с ошибкой, возвращаем ответ с ошибкой,
-    // включающий вывод CGI для отладки.
+    // If process exited abnormally, return 500 with the output as the body.
     if (WIFEXITED(status) && WEXITSTATUS(status) != 0) {
         HttpResponse err;
         err.setStatus(500, "Internal Server Error");
@@ -765,56 +779,56 @@ HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
         errBody << "<html><body><h1>CGI Execution Error</h1>"
                 << "<pre>" << output << "</pre></body></html>";
         err.setBody(errBody.str());
-        // Можно установить Content-Length, если требуется
+        // Set Content-Length
         std::ostringstream oss;
         oss << errBody.str().size();
         err.setHeader("Content-Length", oss.str());
         return err;
     }
 
-    // 3. Парсим вывод CGI-скрипта на заголовки и тело.
-    // Ожидается, что CGI-скрипт выводит сначала заголовки, затем пустую строку, а затем тело.
+    // 3. Parsing the output of the CGI script as an HTTP response message.
+    // So ussualy we have headers and body devide by empty line
     std::istringstream iss(output);
     std::string line;
     std::map<std::string, std::string> headers;
     std::string body;
 
     while (std::getline(iss, line)) {
-        // Если строка оканчивается на '\r', удаляем его.
+        // if the string is ended with '\r' we remove it
         if (!line.empty() && line[line.size() - 1] == '\r')
             line.erase(line.size() - 1);
 
-        // Пустая строка сигнализирует об окончании заголовков.
+        // Empty line means end of headers
         if (line == "")
             break;
 
-        // Разбираем строку вида "Key: Value"
+        // Split the line into key and value
         std::string::size_type pos = line.find(':');
         if (pos != std::string::npos) {
             std::string key = line.substr(0, pos);
             std::string value = line.substr(pos + 1);
-            // Удаляем ведущие пробелы из value.
+            // Remove leading spaces from value
             while (!value.empty() && (value[0] == ' ' || value[0] == '\t'))
                 value.erase(0, 1);
             headers[key] = value;
         }
     }
 
-    // Остаток потока – это тело ответа.
+    // The rest of the output is the body
     std::ostringstream bodyStream;
     bodyStream << iss.rdbuf();
     body = bodyStream.str();
 
-    // 4. Удаляем возможный заголовок Content-Length, чтобы не перезаписывать тело пустым значением.
+    // 4. Erase Content-Length if it's present in the headers
     if (headers.find("Content-Length") != headers.end())
         headers.erase("Content-Length");
 
-    // 5. Формируем объект HttpResponse.
+    // 5. Form the HttpResponse object
     HttpResponse resp;
     int statusCode = 200;
     std::string reasonPhrase = "OK";
 
-    // Если среди заголовков есть "Status", используем его для установки кода.
+    // if we have Status header we should parse it
     if (headers.find("Status") != headers.end()) {
         std::istringstream statusLine(headers["Status"]);
         statusLine >> statusCode;
@@ -825,16 +839,16 @@ HttpResponse Responder::processCgiOutput(int pipeFd, pid_t childPid)
     }
     resp.setStatus(statusCode, reasonPhrase);
 
-    // Устанавливаем остальные заголовки.
+    // Set headers
     for (std::map<std::string, std::string>::iterator it = headers.begin();
          it != headers.end(); ++it) {
         resp.setHeader(it->first, it->second);
     }
 
-    // Устанавливаем тело ответа.
+    // Set body
     resp.setBody(body);
 
-    // Вычисляем и устанавливаем корректный Content-Length.
+    // Set Content-Length with the real body size
     std::ostringstream oss;
     oss << body.size();
     resp.setHeader("Content-Length", oss.str());
@@ -852,8 +866,8 @@ bool Responder::parseMultipartFormData(const std::string &contentType,
                             std::string &filename,
                             std::string &fileContent)
 {
-    // Извлекаем boundary из Content-Type.
-    // Ожидаемый формат: "multipart/form-data; boundary=----WebKitFormBoundaryAQRTcpQXQ6fB9YDJ"
+    // Extract boundary from Content-Type header
+    // Expected format: "multipart/form-data; boundary=----WebKitFormBoundaryAQRTcpQXQ6fB9YDJ"
     size_t pos = contentType.find("boundary=");
     if (pos == std::string::npos) {
         std::cerr << "No boundary found in Content-Type header" << std::endl;
@@ -861,18 +875,18 @@ bool Responder::parseMultipartFormData(const std::string &contentType,
     }
     std::string boundary = contentType.substr(pos + 9);
     boundary = outils.trim(boundary);
-    // Если boundary заключён в кавычки, удалим их
+    // if boundary is quoted, remove the quotes
     if (!boundary.empty() && boundary[0]=='"') {
         boundary.erase(0,1);
         if (!boundary.empty() && boundary[boundary.size()-1]=='"')
             boundary.erase(boundary.size()-1);
     }
-    // Полная граница в теле начинается с двух дефисов:
+    // the full boundary string starts with "--"
     std::string fullBoundary = "--" + boundary;
-    // Конечная граница завершается "--"
+    // the closing boundary string ends with "--"
     std::string closingBoundary = fullBoundary + "--";
 
-    // Используем istringstream для разбора тела запроса.
+    // use std::istringstream to parse the body line by line
     std::istringstream iss(body);
     std::string line;
     bool inPart = false;
@@ -882,18 +896,18 @@ bool Responder::parseMultipartFormData(const std::string &contentType,
     bool filePartFound = false;
     
     while (std::getline(iss, line)) {
-        // Удаляем завершающие символы \r
+        // remove '\r' at the end of the line
         if (!line.empty() && line[line.size()-1] == '\r')
             line.erase(line.size()-1);
 
-        // Если строка равна fullBoundary или closingBoundary, то это граница между частями.
+        // if the line is the full boundary or the closing boundary, it means the end of the current part
         if (line == fullBoundary || line == closingBoundary) {
-            // Если уже собирали одну часть и нашли пустую строку в заголовках – значит, часть завершена.
+            // if we were in a part and the headers were parsed, we have a complete part
             if (inPart && headersParsed) {
-                // Если в partHeaders содержится Content-Disposition с параметром filename, то это наш файл.
+                // if partsHEads has Content-Disposition, we have a file part
                 size_t cdPos = partHeaders.find("Content-Disposition:");
                 if (cdPos != std::string::npos) {
-                    // Пример строки:
+                    // For example
                     // Content-Disposition: form-data; name="myfile"; filename="test.txt"
                     std::istringstream headerStream(partHeaders);
                     std::string headerLine;
@@ -918,15 +932,15 @@ bool Responder::parseMultipartFormData(const std::string &contentType,
                             }
                         }
                     }
-                    // Если параметр filename найден, считаем, что это часть с файлом.
+                    // if we have a filename, we have a file part
                     if (!filename.empty()) {
                         fileContent = partBody;
                         filePartFound = true;
-                        break;  // завершаем разбор
+                        break;  // we have found the file part, we can stop parsing
                     }
                 }
             }
-            // Начинается новая часть. Обнуляем переменные.
+            // reset the part variables and continue parsing
             inPart = true;
             headersParsed = false;
             partHeaders = "";
@@ -934,25 +948,25 @@ bool Responder::parseMultipartFormData(const std::string &contentType,
             continue;
         }
 
-        // Если мы находимся внутри части
+        // If we are in a part, we can parse headers and body
         if (inPart) {
-            // Если заголовки еще не закончили – ищем пустую строку.
+            // if headers are not parsed yet, we are still in the headers section
             if (!headersParsed) {
                 if (line == "") {
-                    // пустая строка – конец заголовков, теперь начинается тело части
+                    // empty line means end of headers
                     headersParsed = true;
                 } else {
                     partHeaders += line + "\r\n";
                 }
             } else {
-                // Собираем тело части. Добавляем перевод строки обратно, если нужно.
+                // headers are parsed, we are in the body section and we add the line to the body
                 partBody += line + "\n";
             }
         }
     }
 
     if (filePartFound) {
-        // Удаляем завершающие переводы строк из fileContent
+        // trim the last '\n' from the body
         fileContent = outils.trim(fileContent);
         return true;
     } else {

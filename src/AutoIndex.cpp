@@ -8,6 +8,7 @@
 #include <string>
 #include <sstream>
 #include <iostream>
+
 struct FileEntry
 {
 	std::string name;
@@ -45,7 +46,7 @@ std::string makeAutoIndexPage(const std::string &dirPath,
 	{
 		std::string name = entry->d_name;
 		if (name == "." || name == "..")
-			continue; // пропускаем служебные
+			continue; 
 		std::string fullPath = dirPath;
 		if (!fullPath.empty() &&
 			 fullPath[fullPath.size() - 1] != '/')

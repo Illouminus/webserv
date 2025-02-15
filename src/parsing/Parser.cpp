@@ -2,7 +2,7 @@
 #include <fstream>
 #include <stdexcept>
 #include <iostream>
-#include <cstdlib> // atoi
+#include <cstdlib> 
 
 Parser::Parser() : currentIndex(0) {}
 Parser::Parser(const Parser &other) { *this = other; }
@@ -136,8 +136,8 @@ void Parser::parseServers()
 		}
 		else
 		{
-			// Если встретилось что-то неожиданное за пределами server {}
-			// Можно проигнорировать или выбросить ошибку
+			// Something unexpected -  error
+			throw std::runtime_error("Unexpected token: " + t);
 			getToken();
 		}
 	}
@@ -160,7 +160,7 @@ void Parser::parseServerBlock(ServerConfig &srv)
 		}
 		else
 		{
-			// Директива сервера
+			// Server's directive
 			std::string directive = getToken();
 			parseServerDirective(srv, directive);
 		}
@@ -174,6 +174,7 @@ void Parser::parseLocationBlock(ServerConfig &srv)
 
 	LocationConfig loc;
 	
+	// For regular expressions we should use ~ and skip the next token
 	if(path == "~")
 	{
 		loc.path = getToken();
@@ -195,6 +196,7 @@ void Parser::parseLocationBlock(ServerConfig &srv)
 		}
 		else
 		{
+			// Location's directive - actually the same as server's directive but for location
 			std::string directive = getToken();
 			parseLocationDirective(loc, directive);
 		}
@@ -252,7 +254,7 @@ void Parser::parseServerDirective(ServerConfig &srv, const std::string &directiv
 	}
 	else
 	{
-		// Неизвестная директива - возможно игнорируем или ошибка
+		// Unknown directive - error
 		throw std::runtime_error("Unknown server directive: " + directive);
 	}
 }
@@ -308,7 +310,7 @@ void Parser::parseLocationDirective(LocationConfig &loc, const std::string &dire
 	}
 	else if (directive == "return")
 	{
-		// Пример: return 301 /newpath;
+		// Example: return 301 /newpath;
 		std::string code = getToken();
 		std::string url = getToken();
 		expectToken(";");
@@ -322,8 +324,7 @@ void Parser::parseLocationDirective(LocationConfig &loc, const std::string &dire
 
 void Parser::parseListen(ServerConfig &srv, const std::string &value)
 {
-	// Формат: ip:port или просто port
-	// Пример: 127.0.0.1:8080
+	// Example: 127.0.0.1:8080
 	size_t pos = value.find(':');
 	if (pos != std::string::npos)
 	{
@@ -340,10 +341,8 @@ void Parser::parseListen(ServerConfig &srv, const std::string &value)
 
 size_t Parser::parseSize(const std::string &value)
 {
-	// Например "200k" или "1m"
 	// k = 1024, m = 1024 * 1024
-	// Если без суффикса - просто число байт
-	// Опционально можно добавить более строгую проверку
+	// Without suffix - bytes
 	size_t len = value.size();
 	if (len == 0)
 		throw std::runtime_error("Invalid size value");

@@ -19,8 +19,7 @@ public:
 	Responder();
 	~Responder();
 
-	// Главная точка входа: на вход - уже распарсенный запрос и ссылка на ServerConfig
-	// Возвращаем готовый HttpResponse
+	// The main method of the class: handle the request and return the response
 	HttpResponse handleRequest(const HttpParser &parser, const ServerConfig &server);
 
 	const LocationConfig *findLocation(const ServerConfig &server, const HttpParser &parser);
@@ -33,39 +32,15 @@ public:
 private:
 	
 	static std::map<std::string, std::string> g_sessions;
-	// Вспомогательная функция: находим нужную LocationConfig*
-
-	// Можно добавить метод для определения Content-Type по расширению
 	std::string getContentTypeByExtension(const std::string &path);
-
-	// Проверка, разрешён ли метод
 	bool isMethodAllowed(HttpMethod method, const ServerConfig &server, const LocationConfig *loc, std::string &allowHeader);
-
-	// Сформировать путь к файлу (с учётом root, location, index и т.д.)
 	std::string buildFilePath(const ServerConfig &server, const LocationConfig *loc, const std::string &path);
-
-	// Попытка отдать статический файл (или вернуть false, если не получилось)
 	bool setBodyFromFile(HttpResponse &resp, const std::string &filePath);
-
-	HttpResponse handleGet(const ServerConfig &server, const HttpParser &parser,
-								  const LocationConfig *loc, const std::string &reqPath);
-	HttpResponse handlePost(const ServerConfig &server,
-									const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
-	HttpResponse handleDelete(const ServerConfig &server,
-									  const LocationConfig *loc, const std::string &reqPath);
-
+	HttpResponse handleGet(const ServerConfig &server, const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
+	HttpResponse handlePost(const ServerConfig &server, const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
+	HttpResponse handleDelete(const ServerConfig &server, const LocationConfig *loc, const std::string &reqPath);
 	std::string extractFilename(const std::string &reqPath);
-
-	HttpResponse handleCgi(const ServerConfig &server, const HttpParser &parser,
-								  const LocationConfig *loc,
-								  const std::string &reqPath);
-
+	HttpResponse handleCgi(const ServerConfig &server, const HttpParser &parser, const LocationConfig *loc, const std::string &reqPath);
 	HttpResponse processCgiOutput(int pipeFd, pid_t childPid);
-
-
-	bool parseMultipartFormData(const std::string &contentType,
-                            const std::string &body,
-                            std::string &fileFieldName,
-                            std::string &filename,
-                            std::string &fileContent);
+	bool parseMultipartFormData(const std::string &contentType, const std::string &body, std::string &fileFieldName, std::string &filename, std::string &fileContent);
 };

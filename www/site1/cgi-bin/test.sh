@@ -1,26 +1,25 @@
-#!/bin/bash
-# test.sh — минимальный CGI-скрипт на shell
-# Убедитесь, что chmod +x test.sh
-# И что loc->cgi_pass = "/bin/sh" (или '/usr/bin/sh')
+#!/bin/sh
+# test.sh - Minimal shell CGI script for testing.
+# Ensure the script is executable: chmod +x test.sh
+# And that the server's cgi_pass points to /bin/sh (or the appropriate shell)
 
-# 1) Прочитать нужные переменные окружения
+# 1) Read environment variables
 METHOD="$REQUEST_METHOD"
-LEN="$CONTENT_LENGTH"
+CONTENT_LENGTH="$CONTENT_LENGTH"
 QUERY_STRING="$QUERY_STRING"
 
-# 2) Считать body, если есть
+# 2) Read POST/PUT body if available
 BODY=""
 if [ "$METHOD" = "POST" ] || [ "$METHOD" = "PUT" ]; then
-    # Считываем ровно $CONTENT_LENGTH байт
-    # shell прочитает их из stdin
-    BODY=$(dd bs=1 count=$LEN 2>/dev/null)
+    BODY=$(dd bs=1 count="$CONTENT_LENGTH" 2>/dev/null)
 fi
 
-# 3) Печатаем заголовок
+# 3) Output response headers
 echo "Content-Type: text/html"
 echo ""
+env
 
-# 4) Печатаем HTML
+# 4) Output HTML response with request details
 cat <<EOF
 <!DOCTYPE html>
 <html>
@@ -29,10 +28,16 @@ cat <<EOF
 <h1>Hello from Shell CGI!</h1>
 <p>REQUEST_METHOD = $METHOD</p>
 <p>QUERY_STRING = $QUERY_STRING</p>
+<h2>Environment Variables</h2>
+<pre>
+REQUEST_METHOD=$REQUEST_METHOD
+CONTENT_LENGTH=$CONTENT_LENGTH
+QUERY_STRING=$QUERY_STRING
+</pre>
 EOF
 
 if [ -n "$BODY" ]; then
-  echo "<h3>Body</h3>"
+  echo "<h2>Body</h2>"
   echo "<pre>$BODY</pre>"
 fi
 

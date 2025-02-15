@@ -77,6 +77,10 @@ std::string HttpParser::getQuery() const {
 	return _query;
 }
 
+std::string HttpParser::getClientIP() const {
+    return _ip;
+}
+
 bool HttpParser::serverIsChosen() const {
     return (_chosenServer != NULL);
 }
@@ -98,6 +102,20 @@ bool HttpParser::serverSelected() const {
 }
 void HttpParser::setServerSelected(bool val) {
     _serverSelected = val;
+}
+
+void HttpParser::setIpFromHeader()  {
+    
+
+    std::map<std::string, std::string>::const_iterator it = _headers.find("x-real-ip");
+    std::map<std::string, std::string>::const_iterator it2 = _headers.find("x-forwarded-for");
+
+    if (it != _headers.end())
+        _ip = it->second;
+    else if (it2 != _headers.end())
+        _ip = it2->second;
+    else
+        _ip = "unknown";
 }
 
 void HttpParser::setMaxBodySize(size_t sz) {
@@ -146,22 +164,21 @@ void HttpParser::appendData(const std::string &data)
 
 void HttpParser::parseHeaders()
 {
-    // Ищем в _buffer последовательность "\r\n\r\n"
-    // которая сигнализирует конец заголовков
+    // Find in the buffer the end of headers (CRLF CRLF or LF LF)
     size_t endHeadersPos = _buffer.find("\r\n\r\n");
     if (endHeadersPos == std::string::npos) {
-        // ещё не пришли все заголовки
+        // don't have CRLF CRLF, try LF LF
         endHeadersPos = _buffer.find("\n\n");
         if (endHeadersPos == std::string::npos) {
-        // ещё не пришли все заголовки
+        // don't have end of headers
         return;
     }
     }
     
 
-    // Получаем часть (все строки заголовков)
+    // Got headers block
     std::string headersBlock = _buffer.substr(0, endHeadersPos);
-    // Убираем их из буфера
+    // Erase headers block from buffer
    if (_buffer.size() >= endHeadersPos + 4 && 
         _buffer.compare(endHeadersPos, 4, "\r\n\r\n") == 0)
     {
@@ -169,16 +186,15 @@ void HttpParser::parseHeaders()
     }
     else
     {
-        // Значит это "\n\n"
+        // There is no CRLF CRLF, try LF LF
         _buffer.erase(0, endHeadersPos + 2);
     }
-    // Теперь разобьём headersBlock по строкам "\r\n"
+    // Now will devise headersBlock into lines
     std::istringstream iss(headersBlock);
     std::string line;
     bool firstLine = true;
     while (std::getline(iss, line, '\n')) {
-        // В getline, если не удалим "\r", могут оставаться символы
-        // Уберём \r в конце
+        // In getline, the delimiter is removed from the stream
         if (!line.empty() && line[line.size()-1] == '\r')
             line.erase(line.size()-1, 1);
 
@@ -187,32 +203,31 @@ void HttpParser::parseHeaders()
             firstLine = false;
             if (_status == PARSING_ERROR)
             {   
-                return; // Ошибка в request line
+                return; // Error in request line
             }
         } else {
             parseHeaderLine(line);
             if (_status == PARSING_ERROR)
-                return; // Ошибка в заголовке
+                return; // Error in header line
         }
     }
 
-    _headersDone = true; // мы закончили читать заголовки
+    _headersDone = true; 
 
-    // Проверяем, есть ли Transfer-Encoding: chunked
+    // Check if we have chunked encoding
     std::string te;
     if (_headers.find("transfer-encoding") != _headers.end())
         te = _headers["transfer-encoding"];
-    // Приводим к lower
     std::transform(te.begin(), te.end(), te.begin(), ::tolower);
 
     if (te == "chunked") {
-        // Переходим в режим парсинга chunked
+        // Move to chunked body parsing
         _status = PARSING_CHUNKED;
-        parseChunkedBody(); // вдруг сразу уже есть что-то в _buffer
+        parseChunkedBody(); // if we have some chunks in buffer
         return;
     }
 
-    // Иначе, проверим Content-Length
+    // If not chunked, check if we have content-length
     if (_headers.find("content-length") != _headers.end()) {
         long cl = std::atol(_headers["content-length"].c_str());
         if (cl < 0) {
@@ -222,9 +237,9 @@ void HttpParser::parseHeaders()
         }
         _contentLength = static_cast<size_t>(cl);
         _status = PARSING_BODY;
-        parseBody(); // может, часть тела уже пришла
+        parseBody(); // Maybe we already have some body in buffer
     } else {
-        // Нет тела (GET или что-то ещё)
+        // If no content-length and no chunked encoding, then body is empty
         _status = COMPLETE;
     }
 }
@@ -278,34 +293,6 @@ void HttpParser::parseRequestLine(const std::string &line)
 }
 
 
-bool HttpParser::isKeepAlive() const
-{
-	//  _version == "HTTP/1.1", default keep-alive, if not specified close
-	//  _version == "HTTP/1.0", default close, if not specified keep-alive
-	std::map<std::string, std::string>::const_iterator it = _headers.find("connection");
-
-	std::string connectionVal;
-	if (it != _headers.end())
-	{
-		connectionVal = it->second;
-		// tolower
-		std::transform(connectionVal.begin(), connectionVal.end(), connectionVal.begin(), ::tolower);
-	}
-
-	if (_version == "HTTP/1.1")
-	{
-		if (connectionVal == "close")
-			return false;
-		return true;
-	}
-	else // HTTP/1.0
-	{
-		if (connectionVal == "keep-alive")
-			return true;
-		return false;
-	}
-}
-
 void HttpParser::parseHeaderLine(const std::string &line)
 {
 	// For example: "Host: localhost:8080"
@@ -352,14 +339,12 @@ ParserError HttpParser::getErrorCode() const
 	return _errorCode;
 }
 
-// Функтор для проверки, что символ не является пробельным (C++98)
 struct IsNotSpace {
     bool operator()(char ch) const {
         return !std::isspace((unsigned char)ch);
     }
 };
 
-// Функция для обрезки пробелов с начала и конца строки (C++98)
 static std::string trim(const std::string &s) {
     std::string result = s;
     result.erase(result.begin(), std::find_if(result.begin(), result.end(), IsNotSpace()));
@@ -368,11 +353,11 @@ static std::string trim(const std::string &s) {
 }
 
 long HttpParser::parseHexNumber(const std::string &hexStr) {
-    // Отделяем расширения: берем подстроку до символа ';'
+    // Remove everything after ';'
     size_t pos = hexStr.find(';');
     std::string token = (pos == std::string::npos) ? hexStr : hexStr.substr(0, pos);
 
-    // Обрезаем пробелы
+    // Trim leading and trailing whitespace
     token = trim(token);
     if (token.empty()) {
         return -1;
@@ -382,7 +367,7 @@ long HttpParser::parseHexNumber(const std::string &hexStr) {
     errno = 0;
     long val = std::strtol(token.c_str(), &endptr, 16);
     if (errno == ERANGE) {
-        // Число слишком велико для типа long
+        // To big number
         return -2;
     }
     if (*endptr != '\0') {
@@ -397,21 +382,21 @@ long HttpParser::parseHexNumber(const std::string &hexStr) {
 void HttpParser::parseChunkedBody() {
 
     while (_status == PARSING_CHUNKED) {
-        // 1) Ищем позицию "\r\n" в буфере (конец строки с размером чанка)
+        // 1) Find the position of the next CRLF
         size_t posRN = _buffer.find("\r\n");
         if (posRN == std::string::npos)
-            return; // ждём больше данных
+            return; // wait for more data
 
-        // 2) Извлекаем строку с размером чанка
+        // 2) Take the chunk size
         std::string hexLen = _buffer.substr(0, posRN);
-        _buffer.erase(0, posRN + 2); // удаляем размер и "\r\n"
+        _buffer.erase(0, posRN + 2); // Remove the chunk size and CRLF
 
-        // 3) Преобразуем строку в число
+        // 3) Transform the chunk size from hex to decimal
         long chunkSize = parseHexNumber(hexLen);
         if (chunkSize == -2) {
-            // Переполнение – число слишком большое
+            // Too  big number
             _status = PARSING_ERROR;
-            _errorCode = ERR_413;  // Request Entity Too Large
+            _errorCode = ERR_413; 
             return;
         }
         if (chunkSize < 0) {
@@ -420,24 +405,24 @@ void HttpParser::parseChunkedBody() {
             return;
         }
 
-        // 4) Если размер чанка равен 0 – это последний чанк
+        // 4) If chunkSize == 0, then it's the last chunk
         if (chunkSize == 0) {
-            // Можно удалить завершающий CRLF, если есть
+            // Remove the trailing CRLF
             if (_buffer.size() >= 2 && _buffer.substr(0,2) == "\r\n")
                 _buffer.erase(0,2);
             _status = COMPLETE;
             return;
         }
 
-        // 5) Проверяем, что в буфере достаточно данных для чанка (данные + CRLF)
+        // 5) Check if we have enough data for the chunk
         if (_buffer.size() < static_cast<size_t>(chunkSize) + 2)
-            return; // ждем больше данных
+            return; //  wait for more data
 
-        // 6) Извлекаем данные чанка
+        // 6) Take the chunk data
         std::string chunkData = _buffer.substr(0, chunkSize);
         _buffer.erase(0, chunkSize);
 
-        // 7) Проверяем, что после данных идёт "\r\n"
+        // 7) Check if the next two bytes are CRLF
         if (_buffer.size() < 2) {
             _status = PARSING_ERROR;
             _errorCode = ERR_400;
@@ -448,9 +433,9 @@ void HttpParser::parseChunkedBody() {
             _errorCode = ERR_400;
             return;
         }
-        _buffer.erase(0, 2); // удаляем "\r\n"
+        _buffer.erase(0, 2); // remove CRLF
 
-        // 8) Добавляем данные чанка к телу
+        // 8) Append the chunk data to the body
         _body += chunkData;
 
         if (_maxBodySize && _maxBodySize > 0 && _body.size() > _maxBodySize) {

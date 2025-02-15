@@ -18,7 +18,6 @@ public:
 private:
 	std::vector<ServerConfig> servers;
 
-	// Лексер:
 	std::vector<std::string> tokens;
 	size_t currentIndex;
 
@@ -36,7 +35,6 @@ private:
 	void parseServerDirective(ServerConfig &srv, const std::string &directive);
 	void parseLocationDirective(LocationConfig &loc, const std::string &directive);
 
-	// Вспомогательные парсеры:
 	void parseListen(ServerConfig &srv, const std::string &value);
 	size_t parseSize(const std::string &value);
 	int parseStatusCode(const std::string &value);

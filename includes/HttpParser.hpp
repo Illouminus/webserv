@@ -52,6 +52,7 @@ public:
 	bool headersComplete() const;
 	bool serverSelected() const;
 	bool serverIsChosen() const;
+	void setIpFromHeader() ;
 	void setServerSelected(bool val);
 	void setChosenServer(const ServerConfig &srv);
 	const ServerConfig *getChosenServer() const;
@@ -63,6 +64,7 @@ public:
 	ParserStatus getStatus() const;
 	HttpMethod getMethod() const;
 	std::string getPath() const;
+	std::string getClientIP() const;
 	std::string getVersion() const;
 	std::string getQuery() const;
 
@@ -70,7 +72,6 @@ public:
 	std::string getBody() const;
 	std::string getHeader(const std::string &key) const;
 	
-	bool isKeepAlive() const;
 
 private:
 	void parseRequestLine(const std::string &line);
@@ -93,6 +94,7 @@ private:
 	HttpMethod _method;
 	std::string _path;
 	std::string _host;
+	std::string _ip;
 	std::string _query;
 	std::string _version; 
 
@@ -105,6 +107,6 @@ private:
 	size_t _maxBodySize;
 
 	bool   _headerParsed;   
-    bool   _headersDone;    
-    bool   _serverSelected; 
-};
+	bool   _headersDone;    
+	bool   _serverSelected; 
+}; 

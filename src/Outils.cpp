@@ -19,13 +19,11 @@ std::map<std::string, std::string> Outils::parseCookieString(const std::string &
     if (cookieStr.empty())
         return result;
 
-    // Разбиваем по ";"
-    // (Если в реальности приходит "; " — оно тоже сработает, потому что getline разделит по ';')
+    // Devise a way to split the string by "; " and then by "="
     std::stringstream ss(cookieStr);
     std::string token;
     while (std::getline(ss, token, ';'))
     {
-        // trim leading/trailing spaces (C++98-совместимо)
         // trim left
         while (!token.empty() && std::isspace(static_cast<unsigned char>(token[0])))
             token.erase(0, 1);
@@ -33,7 +31,7 @@ std::map<std::string, std::string> Outils::parseCookieString(const std::string &
         while (!token.empty() && std::isspace(static_cast<unsigned char>(token[token.size() - 1])))
             token.erase(token.size() - 1, 1);
 
-        // token что-то вроде "key=value"
+        // token is now a key-value pair
         size_t eqPos = token.find('=');
         if (eqPos != std::string::npos)
         {
@@ -65,8 +63,6 @@ std::map<std::string, std::string> Outils::parseCookieString(const std::string &
 
 std::string Outils::generateRandomSessionID()
 {
-    // Very trivial random
-    // You can do something better with <random> or time
     char buf[16];
     for (int i = 0; i < 8; i++)
     {
@@ -90,12 +86,12 @@ std::string Outils::extractExtention(std::string path)
 
 std::string Outils::trim(const std::string &s) {
     std::string result = s;
-    // Удаляем пробелы с начала
+    // Remove leading spaces
     size_t start = 0;
     while (start < result.size() && std::isspace(result[start])) {
         ++start;
     }
-    // Удаляем пробелы с конца
+    // Remove trailing spaces
     size_t end = result.size();
     while (end > start && std::isspace(result[end - 1])) {
         --end;
@@ -148,4 +144,21 @@ void Outils::printConf(const std::vector<ServerConfig> &servers)
             std::cout << "    redirect: " << loc.redirect << "\n";
 		}
 	}
+}
+
+void Outils::storeSessionData(const std::string &sid, const std::string &ip, const std::string &userAgent)
+{
+    SessionData &data = g_sessions[sid];
+
+    data.ip = ip;
+    data.userAgent = userAgent;
+    data.lastVisit = time(NULL);
+}
+
+SessionData *Outils::getSessionData(const std::string &sid)
+{
+    std::map<std::string, SessionData>::iterator it = g_sessions.find(sid);
+    if (it == g_sessions.end())
+        return NULL;
+    return &it->second;
 }
