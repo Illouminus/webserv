@@ -74,7 +74,7 @@ void WebServ::initSockets()
     if (_epoll_fd == -1)
         throw std::runtime_error("epoll_create1 failed");
 
-    // Перебираем группы серверов
+    // Check all servers and create listen sockets for each unique host:port pair
     for (std::map< std::pair<std::string,int>, std::vector<ServerConfig> >::iterator it = serverGroups.begin();
          it != serverGroups.end(); ++it)
     {
@@ -131,7 +131,7 @@ void WebServ::mainLoop()
     Responder responder;
     struct epoll_event events[MAX_EVENTS];
 
-    // Основной цикл работы сервера: завершаем, если установлен флаг stop_flag (SIGINT)
+    // Main loop of the server - wait for events and handle them
     while (!stop_flag)
     {
         int num_events = epoll_wait(_epoll_fd, events, MAX_EVENTS, EPOLL_TIMEOUT);
@@ -148,7 +148,7 @@ void WebServ::mainLoop()
             int fd = events[i].data.fd;
             uint32_t event_mask = events[i].events;
 
-            // Проверяем, является ли fd сокетом прослушивания
+            // Check if the event is on a listen socket or a client socket
             bool isListenSocket = false;
             for (std::vector<int>::iterator it = _listenSockets.begin(); it != _listenSockets.end(); ++it)
             {
@@ -179,7 +179,6 @@ void WebServ::mainLoop()
             }
         }
     }
-    // При завершении цикла можно выполнить дополнительную очистку, если необходимо.
 }
 
 void WebServ::handleClientRead(int fd, Responder &responder)
@@ -214,7 +213,7 @@ void WebServ::handleClientRead(int fd, Responder &responder)
                     resp = responder.makeErrorResponse(413, "Payload Too Large", *srv,
                         "Request Entity Too Large\n");
                 else {
-                    ServerConfig dummy; // временный объект
+                    ServerConfig dummy; // temporary object
                     resp = responder.makeErrorResponse(413, "Payload Too Large", dummy,
                         "Request Entity Too Large\n");
                 }
@@ -242,7 +241,6 @@ void WebServ::handleClientRead(int fd, Responder &responder)
         {
             const ServerConfig *srv = parser.getChosenServer();
             HttpResponse resp = responder.handleRequest(_parsers[fd], *srv);
-            // Устанавливаем заголовок Connection: close, чтобы клиент знал, что соединение будет закрыто
             resp.setHeader("Connection", "close");
             _writeBuffers[fd] = resp.toString();
 
@@ -274,7 +272,7 @@ void WebServ::handleClientWrite(int fd)
     {
         closeClient(fd);
     }
-    else if (sent == -1 && errno != EAGAIN)
+    else if (sent == -1 &&  errno != EAGAIN)
     {
         closeClient(fd);
     }
