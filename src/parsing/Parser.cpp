@@ -51,7 +51,8 @@ void Parser::parseConfig(const std::string &filename)
 	std::string content((std::istreambuf_iterator<char>(ifs)),
 							  std::istreambuf_iterator<char>());
 	ifs.close();
-
+	if (content.empty())
+		throw std::runtime_error("Empty config file");
 	tokenize(content);
 	parseServers();
 	checkUniqueListen();

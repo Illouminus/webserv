@@ -17,7 +17,6 @@ fi
 # 3) Output response headers
 echo "Content-Type: text/html"
 echo ""
-env
 
 # 4) Output HTML response with request details
 cat <<EOF

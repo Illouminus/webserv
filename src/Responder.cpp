@@ -257,6 +257,7 @@ bool Responder::isMethodAllowed(HttpMethod method, const ServerConfig &server, c
 		allowed = loc->methods;
 	else
 		allowed = server.methods;
+        
 
 	// Convert HttpMethod enum to string
 	std::string m;
@@ -637,6 +638,13 @@ HttpResponse Responder::handleCgi(const ServerConfig &server,
                                   const LocationConfig *loc,
                                   const std::string &reqPath)
 {
+
+
+    HttpMethod method = parser.getMethod();
+    if (method != HTTP_METHOD_GET && method != HTTP_METHOD_POST) {
+        return makeErrorResponse(405, "Method Not Allowed", server, "Method Not Allowed for CGI\n");
+    }
+    
     // 1) Build full path to the script
     std::string scriptPath = buildFilePath(server, loc, reqPath);
 
